@@ -8,20 +8,22 @@ const apiClient = axios.create({
   baseURL: "http://localhost:5000/api",
 });
 
-// Use InternalAxiosRequestConfig in interceptor
-apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = sessionStorage.getItem("token");
+apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = sessionStorage.getItem("token");
 
-    if (token) {
-      // headers is AxiosRequestHeaders (which extends AxiosHeaders)
-      const headers = config.headers as AxiosHeaders;
-      headers.set("Authorization", `Bearer ${token}`);
+  if (token) {
+    let headers = config.headers as AxiosHeaders | undefined;
+
+    // If headers isn't an AxiosHeaders instance yet, create one
+    if (!headers || !(headers instanceof AxiosHeaders)) {
+      headers = new AxiosHeaders(headers); // seed with existing values if any
       config.headers = headers;
     }
 
-    return config;
+    headers.set("Authorization", `Bearer ${token}`);
   }
-);
+
+  return config;
+});
 
 export default apiClient;

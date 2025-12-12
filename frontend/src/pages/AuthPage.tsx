@@ -152,6 +152,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     return () => clearInterval(id);
   }, []);
 
+  // ---------------- REHYDRATE AUTH HEADER ON MOUNT ----------------
+  useEffect(() => {
+    const token = sessionStorage.getItem("token");
+    if (token) {
+      apiClient.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    }
+  }, []);
+
   // ---------------- STUDENT: GOOGLE LOGIN ----------------
   const handleGoogleSignIn = async () => {
     setSubmitting(true);
@@ -159,6 +167,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
     try {
       const provider = new GoogleAuthProvider();
+      // optional: always show account chooser
+      provider.setCustomParameters({ prompt: "select_account" });
+
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
@@ -172,8 +183,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       };
 
       if (data.token) {
-        sessionStorage.setItem("token", data.token); // backend JWT
+        // Save backend JWT
+        sessionStorage.setItem("token", data.token);
+        // 🔐 Attach to all future API requests
+        apiClient.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
       }
+
       sessionStorage.setItem("role", "student");
 
       // store basic identity for Navbar
@@ -186,6 +201,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
       const isNew = data.isNewUser ?? false;
 
+      // keep a simple onboarding flag in frontend
+      sessionStorage.setItem(
+        "onboardingCompleted",
+        isNew ? "false" : "true"
+      );
+
       onLogin();
 
       if (isNew) {
@@ -197,6 +218,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       console.error("[AuthPage] Google sign-in failed:", err);
       setStudentError(
         err?.response?.data?.message ||
+          err?.message ||
           "Google sign-in failed. Please try again."
       );
     } finally {
@@ -243,8 +265,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
       if (data.token) {
         sessionStorage.setItem("token", data.token);
+        // 🔐 Attach to all future API requests
+        apiClient.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
       }
       sessionStorage.setItem("role", "instructor");
+      // instructors don’t have onboarding, but set flag anyway
+      sessionStorage.setItem("onboardingCompleted", "true");
 
       // store for Navbar
       const instructorEmail = data.instructor?.email || email;

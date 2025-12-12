@@ -195,7 +195,8 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     { to: "/leaderboard", label: "Leaderboard" },
     { to: "/contests", label: "Contests" },
     { to: "/codepad", label: "CodePad" },
-    { to: "/career/resume", label: "Career Suite" },
+    // 🔥 FIXED: go to the hub, not a non-existent /career/resume
+    { to: "/career", label: "Career Suite" },
     { to: "/resources", label: "Resources" },
   ];
 

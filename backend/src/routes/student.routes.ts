@@ -6,7 +6,7 @@ import { firestore, FieldValue } from "../config/firebase";
 import authMiddleware, { AuthedRequest } from "../middleware/auth.middleware";
 import { requireStudent } from "../middleware/role.middleware";
 
-import { PlatformId, PlatformStats } from "../lib/scoringEngine";
+import { PlatformId } from "../lib/scoringEngine";
 import {
   refreshStudentCPData,
   refreshStudentPlatform,
@@ -14,26 +14,25 @@ import {
 
 const router = express.Router();
 
-// Convenience type so TS knows we have body & query
 type AuthedReq = AuthedRequest & {
   body: any;
   query: any;
 };
 
-// Firestore collection refs
 const STUDENTS_COLLECTION = "students";
 const studentsCol = firestore.collection(STUDENTS_COLLECTION);
 
 /* --------------------------------------------------
- * 🔹 Helper: Load all cpProfiles for a student
- *    → Record<PlatformId, PlatformStats | null>
+ * Helper: Load a map of PlatformId → FULL scraped stats
+ *   - Returns ALL fields stored in cpProfiles/<platform>
+ *   - Shape is Record<PlatformId, any | null> for flexibility
  * -------------------------------------------------- */
 async function loadPlatformStatsMap(
   studentId: string
-): Promise<Record<PlatformId, PlatformStats | null>> {
+): Promise<Record<PlatformId, any | null>> {
   const snap = await studentsCol.doc(studentId).collection("cpProfiles").get();
 
-  const map: Record<PlatformId, PlatformStats | null> = {
+  const map: Record<PlatformId, any | null> = {
     leetcode: null,
     codechef: null,
     codeforces: null,
@@ -43,10 +42,14 @@ async function loadPlatformStatsMap(
   };
 
   snap.forEach((doc: any) => {
-    const data = doc.data() as PlatformStats;
+    const data = doc.data() as any;
     const platform = data.platform as PlatformId;
+
+    // We don't restrict keys here: ALL scraped fields are preserved.
     if (platform in map) {
-      map[platform] = data;
+      map[platform] = {
+        ...data,
+      };
     }
   });
 
@@ -140,7 +143,7 @@ router.post(
         // Portfolio snapshot
         profile: profile || {},
 
-        onboardingCompleted: true,
+        onboardingCompleted: true, // 🔥 explicitly mark as completed
         updatedAt: FieldValue.serverTimestamp(),
       };
 
@@ -149,6 +152,30 @@ router.post(
       }
 
       await studentRef.set(dataToSet, { merge: true });
+
+      // 🔥 AUTO-TRIGGER INITIAL CP REFRESH AFTER ONBOARDING
+      const hasAnyHandle =
+        !!codingHandles &&
+        !!(
+          codingHandles.leetcode ||
+          codingHandles.codeforces ||
+          codingHandles.codechef ||
+          codingHandles.atcoder ||
+          codingHandles.hackerrank ||
+          codingHandles.github
+        );
+
+      if (hasAnyHandle) {
+        try {
+          console.log(
+            `[STUDENT /onboarding] triggering initial CP refresh for student=${studentId}`
+          );
+          await refreshStudentCPData(studentId);
+        } catch (cpErr) {
+          console.error("[STUDENT /onboarding] CP refresh failed:", cpErr);
+          // Onboarding shouldn't fail just because scrapers failed
+        }
+      }
 
       return res.json({ message: "Onboarding completed" });
     } catch (err: any) {
@@ -205,6 +232,8 @@ router.patch(
 
 /* ==================================================
  * 📊 Dashboard Stats → GET /api/student/stats/me
+ *  - All scraped platform stats (FULL docs from cpProfiles)
+ *  - All computed scores (cpScores)
  * ================================================== */
 router.get(
   "/stats/me",
@@ -221,10 +250,15 @@ router.get(
 
       const data = snap.data() || {};
       const cpHandles = data.cpHandles || {};
-      const cpScores = data.cpScores || null;
-      const platformStats = await loadPlatformStatsMap(studentId);
+      const cpScores = data.cpScores || null; // codeSyncScore, displayScore, platformSkills, totals, etc.
+      const platformStats = await loadPlatformStatsMap(studentId); // 🔥 FULL per-platform scraped data
 
-      return res.json({ cpHandles, cpScores, platformStats });
+      // This object is what DashboardPage should consume
+      return res.json({
+        cpHandles,
+        cpScores,
+        platformStats,
+      });
     } catch (err: any) {
       console.error("[STUDENT /stats/me] error:", err);
       return res
@@ -294,10 +328,10 @@ router.post(
     }
   }
 );
-
 /* ==================================================
  * 🏆 Leaderboard → GET /api/student/stats/leaderboard?limit=50
- * (Students + Instructors; only authMiddleware at server.ts level)
+ *  - Scores + basic details for leaderboard page
+ *  - cpScores is EXACTLY the same object used by Dashboard (/stats/me)
  * ================================================== */
 router.get(
   "/stats/leaderboard",
@@ -307,6 +341,8 @@ router.get(
       const rawLimit = (req.query?.limit as string) || "50";
       const limit = Number(rawLimit) || 50;
 
+      // 🔹 We assume scoringEngine always writes cpScores.displayScore.
+      // This is the SAME field Dashboard reads & shows.
       const snap = await studentsCol
         .where("cpScores.displayScore", ">", 0)
         .orderBy("cpScores.displayScore", "desc")
@@ -314,15 +350,29 @@ router.get(
         .get();
 
       const leaderboard = snap.docs.map((doc: any, index: number) => {
-        const d = doc.data() as any;
+        const d = doc.data() || {};
+
+        // 🚨 IMPORTANT:
+        // Do NOT reshape or recompute cpScores here.
+        // Whatever scoringEngine stored in cpScores
+        // (codeSyncScore, displayScore, platformSkills, etc.)
+        // is passed straight through, identical to /stats/me.
+        const cpScores = d.cpScores || null;
+
         return {
           studentId: doc.id,
           rank: index + 1,
+
+          // Basic identity
           name: d.fullName || d.fullname || d.name || null,
           branch: d.branch || null,
           section: d.section || null,
           year: d.yearOfStudy || d.year || null,
-          cpScores: d.cpScores || null,
+
+          // ✅ SAME cpScores object Dashboard gets
+          cpScores,
+
+          // CP handles per platform
           cpHandles: d.cpHandles || {},
         };
       });
@@ -339,7 +389,6 @@ router.get(
 
 /* ==================================================
  * FULL PROFILE → GET /api/student/profile
- * Used by ProtectedRoute and Profile Page
  * ================================================== */
 router.get(
   "/profile",
@@ -353,6 +402,7 @@ router.get(
       const snap = await ref.get();
 
       if (!snap.exists) {
+        // No student doc at all → only case we truly say "onboarding required"
         return res.status(404).json({
           message: "Student profile not found",
           onboardingRequired: true,
@@ -360,33 +410,20 @@ router.get(
       }
 
       const data = snap.data() || {};
-      let onboardingCompleted = !!data.onboardingCompleted;
 
-      // Auto-heal: if enough info is present, mark onboardingCompleted
-      if (!onboardingCompleted) {
-        const hasMinimumInfo =
-          (data.fullName || data.fullname) &&
-          data.branch &&
-          (data.yearOfStudy || data.year) &&
-          data.section;
-
-        if (hasMinimumInfo) {
-          onboardingCompleted = true;
-          await ref.set(
-            {
-              onboardingCompleted: true,
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-        }
-      }
+      // ✅ If the doc exists but onboardingCompleted is false/undefined,
+      //    we *auto-upgrade* them to completed instead of 403-ing.
+      let onboardingCompleted = data.onboardingCompleted === true;
 
       if (!onboardingCompleted) {
-        return res.status(403).json({
-          message: "Onboarding required",
-          onboardingRequired: true,
-        });
+        onboardingCompleted = true;
+        await ref.set(
+          {
+            onboardingCompleted: true,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       return res.json({

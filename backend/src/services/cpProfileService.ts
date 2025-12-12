@@ -1,82 +1,122 @@
 // src/services/cpProfileService.ts
-import admin from "firebase-admin";
+
+import { firestore, FieldValue } from "../config/firebase";
 import {
-  PlatformStats,
   PlatformId,
+  RawPlatformStatsMap,
 } from "../lib/scoringEngine";
 
-const db = admin.firestore();
+const STUDENTS_COLLECTION = "students";
+const studentsCol = firestore.collection(STUDENTS_COLLECTION);
 
-export type CPProfileDoc = PlatformStats & {
-  lastUpdated?: FirebaseFirestore.Timestamp;
-};
+const ALL_PLATFORMS: PlatformId[] = [
+  "leetcode",
+  "codechef",
+  "hackerrank",
+  "codeforces",
+  "github",
+  "atcoder",
+];
 
-const USERS_COLLECTION = "users";
-const CP_SUBCOLLECTION = "cpProfiles";
+/* ------------------------------------------------------------------
+ * Get full map: platform → stats (FULL docs from cpProfiles)
+ * ------------------------------------------------------------------ */
+export async function getPlatformStatsMap(
+  studentId: string
+): Promise<RawPlatformStatsMap> {
+  const snap = await studentsCol.doc(studentId).collection("cpProfiles").get();
 
-export async function savePlatformStats(
-  userId: string,
-  stats: PlatformStats
-): Promise<void> {
-  const ref = db
-    .collection(USERS_COLLECTION)
-    .doc(userId)
-    .collection(CP_SUBCOLLECTION)
-    .doc(stats.platform);
-
-  const doc: CPProfileDoc = {
-    ...stats,
-    lastUpdated: admin.firestore.FieldValue.serverTimestamp() as FirebaseFirestore.Timestamp,
+  const emptyMap: RawPlatformStatsMap = {
+    leetcode: null,
+    codechef: null,
+    hackerrank: null,
+    codeforces: null,
+    github: null,
+    atcoder: null,
   };
 
-  await ref.set(doc, { merge: true });
-}
+  if (snap.empty) return emptyMap;
 
-export async function getUserPlatformStats(
-  userId: string
-): Promise<PlatformStats[]> {
-  const snap = await db
-    .collection(USERS_COLLECTION)
-    .doc(userId)
-    .collection(CP_SUBCOLLECTION)
-    .get();
+  const map: RawPlatformStatsMap = { ...emptyMap };
 
-  const statsList: PlatformStats[] = [];
+  snap.forEach((doc: any) => {
+    const data = doc.data() || {};
+    const platform =
+      (data.platform || doc.id) as PlatformId;
 
-  snap.forEach((doc) => {
-    const data = doc.data() as CPProfileDoc;
-
-    const stats: PlatformStats = {
-      platform: data.platform as PlatformId,
-      handle: data.handle,
-      displayName: data.displayName,
-      profileUrl: data.profileUrl,
-
-      problemsSolvedTotal: data.problemsSolvedTotal,
-      problemsSolvedByDifficulty: data.problemsSolvedByDifficulty,
-
-      rating: data.rating,
-      maxRating: data.maxRating,
-      score: data.score,
-
-      contestsParticipated: data.contestsParticipated,
-
-      badges: data.badges,
-      certificates: data.certificates,
-      stars: data.stars,
-
-      fullySolved: data.fullySolved,
-      partiallySolved: data.partiallySolved,
-
-      domainScores: data.domainScores,
-
-      contributionsLastYear: data.contributionsLastYear,
-      publicRepos: data.publicRepos,
-      starsReceived: data.starsReceived,
-    };
-
-    statsList.push(stats);
+    if (ALL_PLATFORMS.includes(platform)) {
+      map[platform] = data;
+    }
   });
 
-  return statsList;
+  return map;
+}
+
+/* ------------------------------------------------------------------
+ * Get a single platform profile
+ * ------------------------------------------------------------------ */
+export async function getPlatformProfile(
+  studentId: string,
+  platform: PlatformId
+): Promise<any | null> {
+  // Prefer doc id = platform
+  const ref = studentsCol
+    .doc(studentId)
+    .collection("cpProfiles")
+    .doc(platform);
+
+  const snap = await ref.get();
+  if (snap.exists) {
+    return snap.data() || null;
+  }
+
+  // Fallback: search by field "platform" if old data used random doc IDs
+  const querySnap = await studentsCol
+    .doc(studentId)
+    .collection("cpProfiles")
+    .where("platform", "==", platform)
+    .limit(1)
+    .get();
+
+  if (!querySnap.empty) {
+    return querySnap.docs[0].data() || null;
+  }
+
+  return null;
+}
+
+/* ------------------------------------------------------------------
+ * Save/update platform profile
+ *  - profileData === null → delete profile (no handle)
+ *  - otherwise upsert
+ * ------------------------------------------------------------------ */
+export async function savePlatformProfile(
+  studentId: string,
+  platform: PlatformId,
+  profileData: any | null
+): Promise<void> {
+  const colRef = studentsCol.doc(studentId).collection("cpProfiles");
+  const docRef = colRef.doc(platform);
+
+  if (profileData == null) {
+    // No handle / clear profile
+    try {
+      await docRef.delete();
+    } catch (err) {
+      console.error(
+        "[cpProfileService] deletePlatformProfile error:",
+        err
+      );
+    }
+    return;
+  }
+
+  const payload = {
+    ...profileData,
+    platform,
+    lastScrapedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await docRef.set(payload, { merge: true });
 }

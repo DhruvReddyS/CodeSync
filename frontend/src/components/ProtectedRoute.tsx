@@ -16,6 +16,8 @@ type ProtectedRouteProps = {
    *   - /onboarding → requireOnboarding = false
    */
   requireOnboarding?: boolean;
+  /** 🔁 bump this when auth state changes to force re-check */
+  authVersion?: number;
 };
 
 // allowed: null → still checking
@@ -26,6 +28,7 @@ export default function ProtectedRoute({
   allowedRoles,
   children,
   requireOnboarding = true,
+  authVersion,
 }: ProtectedRouteProps) {
   const [allowed, setAllowed] = useState<boolean | "onboarding" | null>(null);
   const location = useLocation();
@@ -41,6 +44,8 @@ export default function ProtectedRoute({
         return;
       }
 
+      const path = location.pathname;
+
       // ✅ Instructor routes: no onboarding check ever
       if (role === "instructor") {
         setAllowed(true);
@@ -49,8 +54,15 @@ export default function ProtectedRoute({
 
       // ✅ Student routes that don't need onboarding check
       // e.g. /onboarding itself, or explicit requireOnboarding={false}
-      const path = location.pathname;
       if (!requireOnboarding || path === "/onboarding") {
+        setAllowed(true);
+        return;
+      }
+
+      // 🧠 Fast-path: if we already know onboarding is done from frontend flag,
+      // skip hitting the backend.
+      const localOnboarding = sessionStorage.getItem("onboardingCompleted");
+      if (localOnboarding === "true") {
         setAllowed(true);
         return;
       }
@@ -59,9 +71,13 @@ export default function ProtectedRoute({
       try {
         const res = await apiClient.get("/student/profile");
 
-        if (res.data?.onboardingCompleted) {
+        const completed = !!res.data?.onboardingCompleted;
+        if (completed) {
+          // keep frontend flag in sync
+          sessionStorage.setItem("onboardingCompleted", "true");
           setAllowed(true);
         } else {
+          sessionStorage.setItem("onboardingCompleted", "false");
           setAllowed("onboarding");
         }
       } catch (err: any) {
@@ -69,7 +85,14 @@ export default function ProtectedRoute({
         const onboardingRequired =
           err?.response?.data?.onboardingRequired === true;
 
-        if ((status === 404 || status === 403) && onboardingRequired) {
+        // If backend explicitly says onboardingRequired OR
+        // profile not found/forbidden, treat it as "go to onboarding"
+        if (
+          onboardingRequired ||
+          status === 404 ||
+          status === 403
+        ) {
+          sessionStorage.setItem("onboardingCompleted", "false");
           setAllowed("onboarding");
         } else {
           console.error("[ProtectedRoute] /student/profile error:", err);
@@ -78,14 +101,26 @@ export default function ProtectedRoute({
       }
     }
 
-    check();
-  }, [allowedRoles, requireOnboarding, location.pathname]);
+    // reset state while re-checking
+    setAllowed(null);
+    void check();
+  }, [
+    allowedRoles,
+    requireOnboarding,
+    location.pathname,
+    authVersion, // 🔥 re-run when authVersion changes
+  ]);
 
   // Still checking
   if (allowed === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#050509] text-slate-200">
-        <p className="text-sm">Checking your access…</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" />
+          <p className="text-xs text-slate-400">
+            Syncing your CodeSync access…
+          </p>
+        </div>
       </div>
     );
   }

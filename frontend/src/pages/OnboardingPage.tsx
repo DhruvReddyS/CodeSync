@@ -22,6 +22,8 @@ const TOTAL_STEPS = 4;
 const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
 
+
+
   const [loadingUser, setLoadingUser] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Errors>({});

@@ -3,10 +3,13 @@ import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 
+// ROUTES
 import authRoutes from "./routes/auth.routes";
 import studentRoutes from "./routes/student.routes";
 import instructorRoutes from "./routes/instructor.routes";
+import careerRoutes from "./routes/career.routes";   // ✅ ADDED
 
+// FIREBASE
 import { firestore, FieldValue } from "./config/firebase";
 
 const app = express();
@@ -18,19 +21,18 @@ app.use(
     credentials: true,
   })
 );
+
 app.use(express.json());
 
 // ---------- ROUTES ----------
 app.use("/api/auth", authRoutes);
-
-// ❇️ student.routes itself applies authMiddleware + requireStudent
-//    for student-only routes, and only authMiddleware for leaderboard.
 app.use("/api/student", studentRoutes);
-
-// ❇️ instructor.routes itself applies authMiddleware + requireInstructor
 app.use("/api/instructor", instructorRoutes);
 
-// Health
+// ✅ NEW CAREER SUITE ROUTES
+app.use("/api/career", careerRoutes);
+
+// ---------- HEALTH CHECK ----------
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
