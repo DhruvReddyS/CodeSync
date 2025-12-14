@@ -270,7 +270,7 @@ const CodePadPage: React.FC = () => {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE}/api/execute`, {
+      const response = await fetch(`${API_BASE}/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -317,7 +317,7 @@ const CodePadPage: React.FC = () => {
     setAiAdvice("");
 
     try {
-      const response = await fetch(`${API_BASE}/api/ai-helper`, {
+      const response = await fetch(`${API_BASE}/ai-helper`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
