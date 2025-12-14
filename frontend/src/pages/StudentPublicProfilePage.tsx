@@ -1,33 +1,22 @@
 // src/pages/StudentPublicProfilePage.tsx
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import apiClient from "../lib/apiClient";
 import { motion, AnimatePresence } from "framer-motion";
+import apiClient from "../lib/apiClient";
 import {
   RiArrowLeftLine,
   RiExternalLinkLine,
   RiFileCopyLine,
   RiCheckLine,
   RiTimeLine,
-  RiSparkling2Line,
-  RiTrophyLine,
-  RiShieldCheckLine,
-  RiBarChart2Line,
-  RiPulseLine,
+  RiInformationLine,
   RiMailLine,
   RiPhoneLine,
   RiBuilding2Line,
-  RiGraduationCapLine,
   RiHashtag,
-  RiStarSmileLine,
+  RiGraduationCapLine,
   RiLinksLine,
-  RiCloseLine,
-  RiArrowRightUpLine,
-  RiUser3Line,
-  RiVerifiedBadgeLine,
-  RiFireLine,
-  RiInformationLine,
-  RiMedalLine,
+  RiSparkling2Line,
   RiBookmarkLine,
 } from "react-icons/ri";
 import {
@@ -46,12 +35,32 @@ type PlatformKey =
   | "hackerrank"
   | "codeforces"
   | "github"
-  | "atcoder";
+  | "atcoder"
+  | "geeksforgeeks";
 
 type CpScores = {
   codeSyncScore?: number | null;
-  displayScore?: number | null; // backend might send huge values sometimes
+  displayScore?: number | null;
   platformSkills?: Partial<Record<PlatformKey, number>>;
+};
+
+type ApiPublicProfileResponse = {
+  student: {
+    id: string;
+    fullName: string | null;
+    branch: string | null;
+    section: string | null;
+    year: string | number | null;
+    rollNumber: string | null;
+    graduationYear: string | null;
+    profile: any;
+    cpHandles: Partial<Record<PlatformKey, string | null>>;
+    collegeEmail?: string | null;
+    personalEmail?: string | null;
+    phone?: string | null;
+  };
+  cpScores: CpScores | null;
+  platformStats: Record<string, any | null>;
 };
 
 type ApiProfile = {
@@ -74,82 +83,63 @@ type ApiProfile = {
   profile: any;
 };
 
-type ApiPublicProfileResponse = {
-  student: {
-    id: string;
-    fullName: string | null;
-    branch: string | null;
-    section: string | null;
-    year: string | number | null;
-    rollNumber: string | null;
-    graduationYear: string | null;
-    profile: any;
-    cpHandles: Partial<Record<PlatformKey, string | null>>;
-    collegeEmail?: string | null;
-    personalEmail?: string | null;
-    phone?: string | null;
-  };
-  cpScores: CpScores | null;
-  platformStats: Record<string, any | null>;
-};
-
 const PLATFORM_META: Record<
   PlatformKey,
   {
     label: string;
-    short: string;
+    badge: string;
+    color: string;
     icon: React.ReactNode;
-    colorClass: string;
-    glow: string;
     baseUrl?: (h: string) => string;
   }
 > = {
   leetcode: {
     label: "LeetCode",
-    short: "LC",
+    badge: "L",
+    color: "#f59e0b",
     icon: <SiLeetcode />,
-    colorClass: "text-amber-300",
-    glow: "from-amber-500/28 via-amber-500/0 to-transparent",
     baseUrl: (h) => `https://leetcode.com/u/${h}/`,
   },
   codechef: {
     label: "CodeChef",
-    short: "CC",
+    badge: "C",
+    color: "#7c5f4a",
     icon: <SiCodechef />,
-    colorClass: "text-orange-300",
-    glow: "from-orange-500/28 via-orange-500/0 to-transparent",
     baseUrl: (h) => `https://www.codechef.com/users/${h}`,
   },
   hackerrank: {
     label: "HackerRank",
-    short: "HR",
+    badge: "H",
+    color: "#22c55e",
     icon: <SiHackerrank />,
-    colorClass: "text-emerald-300",
-    glow: "from-emerald-500/28 via-emerald-500/0 to-transparent",
     baseUrl: (h) => `https://www.hackerrank.com/profile/${h}`,
   },
   codeforces: {
-    label: "Codeforces",
-    short: "CF",
+    label: "CodeForces",
+    badge: "CF",
+    color: "#38bdf8",
     icon: <SiCodeforces />,
-    colorClass: "text-sky-300",
-    glow: "from-sky-500/28 via-sky-500/0 to-transparent",
     baseUrl: (h) => `https://codeforces.com/profile/${h}`,
   },
   github: {
     label: "GitHub",
-    short: "GH",
+    badge: "G",
+    color: "#94a3b8",
     icon: <SiGithub />,
-    colorClass: "text-lime-300",
-    glow: "from-lime-500/28 via-lime-500/0 to-transparent",
     baseUrl: (h) => `https://github.com/${h}`,
+  },
+  geeksforgeeks: {
+    label: "Geeks For Geeks",
+    badge: "G",
+    color: "#16a34a",
+    icon: <RiLinksLine />,
+    baseUrl: (h) => `https://auth.geeksforgeeks.org/user/${h}/`,
   },
   atcoder: {
     label: "AtCoder",
-    short: "AC",
+    badge: "A",
+    color: "#6366f1",
     icon: <RiLinksLine />,
-    colorClass: "text-indigo-300",
-    glow: "from-indigo-500/28 via-indigo-500/0 to-transparent",
     baseUrl: (h) => `https://atcoder.jp/users/${h}`,
   },
 };
@@ -160,6 +150,7 @@ const PLATFORM_ORDER: PlatformKey[] = [
   "hackerrank",
   "codeforces",
   "github",
+  "geeksforgeeks",
   "atcoder",
 ];
 
@@ -169,151 +160,220 @@ function safeNum(n: any): number {
   const x = Number(n);
   return Number.isFinite(x) ? x : 0;
 }
-
 function formatValue(v: any): string {
   if (v == null || v === "") return "—";
   const n = Number(v);
   if (Number.isFinite(n)) return n.toLocaleString("en-IN");
   return String(v);
 }
-
-function clamp01(x: number) {
-  if (!Number.isFinite(x)) return 0;
-  return Math.max(0, Math.min(1, x));
-}
-
-function scoreTier(score: number) {
-  if (score >= 85)
-    return {
-      label: "Elite",
-      hint: "Top-tier consistency",
-      cls: "text-emerald-300",
-    };
-  if (score >= 70)
-    return { label: "Strong", hint: "High signal performer", cls: "text-sky-300" };
-  if (score >= 50)
-    return { label: "Rising", hint: "Solid momentum", cls: "text-amber-300" };
-  if (score > 0)
-    return { label: "Starter", hint: "Growing baseline", cls: "text-slate-200" };
-  return { label: "—", hint: "No score yet", cls: "text-slate-500" };
-}
-
-function initialsFromName(name?: string | null) {
-  const n = (name || "").trim();
-  if (!n) return "U";
-  const parts = n.split(/\s+/).filter(Boolean).slice(0, 2);
-  return parts.map((p) => p[0]?.toUpperCase?.()).join("") || "U";
-}
-
 function hashToHue(input: string) {
   let h = 0;
   for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) >>> 0;
   return h % 360;
 }
 
-/* ---------------- PREMIUM SCORE RING (SVG) ---------------- */
+/* ---------------- DONUT ---------------- */
 
-function ScoreRing({
-  value,
-  size = 168,
-  displayText,
+type DonutSeg = { key: PlatformKey; label: string; value: number; color: string };
+
+function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
+  const angleRad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(angleRad), y: cy + r * Math.sin(angleRad) };
+}
+function arcPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number) {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function DonutChart({
+  totalLabel,
+  totalValue,
+  segments,
 }: {
-  value: number; // ring progress expects 0..100
-  size?: number;
-  displayText: string; // center text
+  totalLabel: string;
+  totalValue: number;
+  segments: DonutSeg[];
 }) {
-  const pct = clamp01(value / 100);
-  const stroke = 10;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const dash = c * pct;
-  const gap = c - dash;
+  const size = 360;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 118;
+  const stroke = 26;
 
-  const digits = (displayText || "").replace(/[^\d]/g, "").length;
-  const numClass =
-    digits >= 9
-      ? "text-lg"
-      : digits >= 7
-      ? "text-xl"
-      : digits === 6
-      ? "text-2xl"
-      : digits === 5
-      ? "text-[1.75rem]"
-      : "text-3xl";
+  // ✅ tooltip state
+  const [hover, setHover] = useState<{
+    seg: DonutSeg;
+    x: number;
+    y: number;
+    pct: number;
+  } | null>(null);
+
+  const cleanSegs = segments.map((s) => ({ ...s, value: safeNum(s.value) }));
+  const total = Math.max(1, cleanSegs.reduce((a, s) => a + s.value, 0));
+
+  // keep tooltip inside viewport
+  const tooltip = hover
+    ? {
+        ...hover,
+        x: clamp(hover.x, 12, window.innerWidth - 12),
+        y: clamp(hover.y, 12, window.innerHeight - 12),
+      }
+    : null;
+
+  let a = 0;
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="block">
-        <defs>
-          <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="rgba(56,189,248,0.95)" />
-            <stop offset="55%" stopColor="rgba(236,72,153,0.85)" />
-            <stop offset="100%" stopColor="rgba(74,222,128,0.85)" />
-          </linearGradient>
-          <filter id="softGlow">
-            <feGaussianBlur stdDeviation="2.8" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
+    <>
+      {/* Tooltip (fixed so it never clips) */}
+      <AnimatePresence>
+        {tooltip && (
+          <motion.div
+            key="donut-tip"
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.12 }}
+            style={{
+              position: "fixed",
+              left: tooltip.x + 14,
+              top: tooltip.y + 14,
+              zIndex: 9999,
+              pointerEvents: "none",
+            }}
+          >
+            <div className="rounded-2xl border border-white/10 bg-[#050712]/95 backdrop-blur-xl px-4 py-3 shadow-[0_30px_120px_rgba(0,0,0,0.7)]">
+              <div className="flex items-center gap-3">
+                <span
+                  className="h-3 w-3 rounded-sm"
+                  style={{ background: tooltip.seg.color }}
+                />
+                <p className="text-sm font-semibold text-slate-100">
+                  {tooltip.seg.label}
+                </p>
+              </div>
 
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke="rgba(148,163,184,0.18)"
-          strokeWidth={stroke}
-          fill="transparent"
-        />
+              <div className="mt-2 flex items-end gap-2">
+                <p className="text-2xl font-bold text-sky-300 tabular-nums">
+                  {formatValue(Math.round(tooltip.seg.value))}
+                </p>
+                <p className="text-xs text-slate-400">
+                  ({tooltip.pct.toFixed(1)}%)
+                </p>
+              </div>
 
-        <motion.circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke="url(#ringGrad)"
-          strokeWidth={stroke}
-          fill="transparent"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${gap}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          initial={{ strokeDasharray: `0 ${c}` }}
-          animate={{ strokeDasharray: `${dash} ${gap}` }}
-          transition={{ duration: 0.9, ease: "easeOut" }}
-          filter="url(#softGlow)"
-        />
-      </svg>
+              <p className="mt-1 text-[0.72rem] text-slate-400">
+                Hovered slice value
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-3">
-        <p className="text-[0.62rem] uppercase tracking-[0.34em] text-slate-500">
-          CodeSync
-        </p>
-        <p className={`mt-1 font-bold text-slate-50 tabular-nums ${numClass} leading-none`}>
-          {displayText}
-        </p>
-        <p className="mt-2 text-[0.72rem] text-slate-400">Unified score</p>
+      <div className="rounded-[28px] border border-white/10 bg-[#070816]/55 p-5 shadow-[0_30px_120px_rgba(0,0,0,0.55)]">
+        <div className="relative flex items-center justify-center">
+          <svg width={size} height={size} className="block">
+            <circle
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill="transparent"
+              stroke="rgba(148,163,184,0.12)"
+              strokeWidth={stroke}
+            />
+
+            {cleanSegs
+              .filter((s) => s.value > 0)
+              .map((s) => {
+                const start = a;
+                const sweep = (s.value / total) * 360;
+                const end = start + sweep;
+                a = end;
+
+                const pct = (s.value / total) * 100;
+
+                return (
+                  <path
+                    key={s.key}
+                    d={arcPath(cx, cy, r, start, end)}
+                    fill="transparent"
+                    stroke={s.color}
+                    strokeWidth={stroke}
+                    strokeLinecap="butt"
+                    style={{
+                      cursor: "pointer",
+                      filter: hover?.seg.key === s.key ? "brightness(1.12)" : "none",
+                      transition: "filter 120ms ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      setHover({
+                        seg: s,
+                        x: e.clientX,
+                        y: e.clientY,
+                        pct,
+                      });
+                    }}
+                    onMouseMove={(e) => {
+                      setHover((prev) =>
+                        prev && prev.seg.key === s.key
+                          ? { ...prev, x: e.clientX, y: e.clientY }
+                          : prev
+                      );
+                    }}
+                    onMouseLeave={() => setHover(null)}
+                  />
+                );
+              })}
+
+            <circle
+              cx={cx}
+              cy={cy}
+              r={r - stroke / 2 - 26}
+              fill="rgba(2,2,10,0.86)"
+              stroke="rgba(148,163,184,0.12)"
+            />
+          </svg>
+
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <p className="text-4xl font-bold text-sky-300 tabular-nums">
+              {formatValue(Math.round(totalValue))}
+            </p>
+            <p className="mt-1 text-sm text-slate-400">{totalLabel}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-slate-200">
+          {cleanSegs.map((s) => (
+            <div key={s.key} className="inline-flex items-center gap-2">
+              <span className="h-3 w-3 rounded-sm" style={{ background: s.color }} />
+              <span className="text-slate-200">{s.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
-
-      <div className="pointer-events-none absolute -inset-1 rounded-full bg-gradient-to-r from-sky-500/18 via-fuchsia-500/10 to-emerald-500/14 blur-xl" />
-    </div>
+    </>
   );
 }
 
-/* ---------------- MAIN PAGE ---------------- */
+/* ---------------- PAGE ---------------- */
 
 export default function StudentPublicProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  // ✅ hooks always same order
   const [data, setData] = useState<ApiProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
-  const [tab, setTab] = useState<"overview" | "platforms" | "portfolio">("overview");
   const [toast, setToast] = useState<{ msg: string; ok?: boolean } | null>(null);
 
-  const [activePlatform, setActivePlatform] = useState<PlatformKey | null>(null);
+  const [metric, setMetric] = useState<"overall" | "solved" | "contests" | "rating">("overall");
+  const [portfolioOpen, setPortfolioOpen] = useState(false); // initial collapsed ✅
 
   useEffect(() => {
     if (!id) return;
@@ -348,7 +408,6 @@ export default function StudentPublicProfilePage() {
 
         setData(normalized);
       } catch (e: any) {
-        console.error("[StudentPublicProfilePage] load error:", e);
         setErr(e?.response?.data?.message || e?.message || "Failed to load profile");
       } finally {
         setLoading(false);
@@ -371,45 +430,42 @@ export default function StudentPublicProfilePage() {
     }
   };
 
+  // ✅ early returns AFTER hooks
   if (loading) return <LoadingShell onBack={() => navigate(-1)} />;
-  if (!data || err)
-    return <ErrorShell message={err || "Unknown error"} onBack={() => navigate(-1)} />;
+  if (!data || err) return <ErrorShell message={err || "Unknown error"} onBack={() => navigate(-1)} />;
 
   /* ---------------- DERIVED ---------------- */
 
+  const profile = data.profile || {};
   const fullname = data.fullname || "Student";
-  const initials = initialsFromName(fullname);
+  const hue = hashToHue(data.id || fullname);
 
   const rawScore = safeNum(data?.cpScores?.displayScore ?? data?.cpScores?.codeSyncScore ?? 0);
-  const ringScore = Math.max(
-    0,
-    Math.min(100, safeNum(data?.cpScores?.displayScore ?? 0) || (rawScore > 100 ? 100 : rawScore))
-  );
   const scoreText = formatValue(Math.round(rawScore));
 
-  const tier = scoreTier(
-    Math.max(
-      0,
-      Math.min(100, safeNum(data?.cpScores?.displayScore ?? (rawScore > 100 ? 100 : rawScore)))
-    )
-  );
-
-  const profile = data.profile || {};
   const aboutText =
-    profile?.about?.trim?.() || "No bio added yet. Stats and platform links are visible below.";
+    (typeof profile?.about === "string" ? profile.about.trim() : "") || "No bio added yet.";
 
   const skills: string[] = Array.isArray(profile?.skills) ? profile.skills : [];
   const interests: string[] = Array.isArray(profile?.interests) ? profile.interests : [];
 
   const projects: any[] = Array.isArray(profile?.projects) ? profile.projects : [];
-  const certifications: any[] = Array.isArray(profile?.certifications) ? profile.certifications : [];
   const internships: any[] = Array.isArray(profile?.internships) ? profile.internships : [];
-  const links: any[] = Array.isArray(profile?.links) ? profile.links : [];
+  const certifications: any[] = Array.isArray(profile?.certifications) ? profile.certifications : [];
 
-  const linkedPlatforms = PLATFORM_ORDER.filter(
-    (p) => ((data.cpHandles?.[p] || "") as string).trim().length > 0
-  );
-  const linkedPlatformsCount = linkedPlatforms.length;
+  const statFor = (p: PlatformKey) => (data.platformStats || {})[p] || null;
+  const solvedByPlatform = (p: PlatformKey) => {
+    const s = statFor(p);
+    return s?.totalSolved ?? s?.problemsSolved ?? s?.problemsSolvedTotal ?? s?.solved ?? null;
+  };
+  const ratingByPlatform = (p: PlatformKey) => {
+    const s = statFor(p);
+    return s?.rating ?? s?.contestRating ?? s?.currentRating ?? s?.maxRating ?? null;
+  };
+  const contestsByPlatform = (p: PlatformKey) => {
+    const s = statFor(p);
+    return s?.contestsParticipated ?? s?.contests ?? s?.contestCount ?? null;
+  };
 
   const openHandle = (platform: PlatformKey) => {
     const h = ((data?.cpHandles?.[platform] || "") as string).trim();
@@ -418,44 +474,52 @@ export default function StudentPublicProfilePage() {
     window.open(toUrl(h), "_blank", "noopener,noreferrer");
   };
 
-  const solvedByPlatform = (p: PlatformKey) => {
-    const s = (data.platformStats || {})[p] || null;
-    return s?.totalSolved ?? s?.problemsSolved ?? s?.problemsSolvedTotal ?? s?.solved ?? null;
-  };
-
-  const ratingByPlatform = (p: PlatformKey) => {
-    const s = (data.platformStats || {})[p] || null;
-    return s?.rating ?? s?.contestRating ?? s?.currentRating ?? s?.maxRating ?? null;
-  };
-
-  const contestsByPlatform = (p: PlatformKey) => {
-    const s = (data.platformStats || {})[p] || null;
-    return s?.contestsParticipated ?? s?.contests ?? s?.contestCount ?? null;
-  };
-
-  const totalSolved = PLATFORM_ORDER.reduce((acc, p) => acc + safeNum(solvedByPlatform(p)), 0);
-
-  const completeness = clamp01(
-    (skills.length / 10) * 0.35 +
-      (linkedPlatformsCount / 6) * 0.35 +
-      clamp01(ringScore / 100) * 0.3
+  const linkedPlatforms = PLATFORM_ORDER.filter(
+    (p) => ((data.cpHandles?.[p] || "") as string).trim().length > 0
   );
-  const energy = clamp01(clamp01(ringScore / 100) * 0.7 + (linkedPlatformsCount / 6) * 0.3);
-
   const platformSkills = data?.cpScores?.platformSkills || {};
-  const maxPlatformSkill = Math.max(
-    1,
-    ...PLATFORM_ORDER.map((k) => safeNum(platformSkills?.[k] ?? 0))
-  );
 
-  const avatarUrl =
-    profile?.avatarUrl || profile?.photoUrl || profile?.imageUrl || profile?.avatar || null;
+  const segmentsOverall: DonutSeg[] = PLATFORM_ORDER.map((p) => ({
+    key: p,
+    label: PLATFORM_META[p].label,
+    value: safeNum(platformSkills?.[p] ?? 0),
+    color: PLATFORM_META[p].color,
+  }));
+  const segmentsSolved: DonutSeg[] = PLATFORM_ORDER.map((p) => ({
+    key: p,
+    label: PLATFORM_META[p].label,
+    value: safeNum(solvedByPlatform(p)),
+    color: PLATFORM_META[p].color,
+  }));
+  const segmentsContests: DonutSeg[] = PLATFORM_ORDER.map((p) => ({
+    key: p,
+    label: PLATFORM_META[p].label,
+    value: safeNum(contestsByPlatform(p)),
+    color: PLATFORM_META[p].color,
+  }));
+  const segmentsRating: DonutSeg[] = PLATFORM_ORDER.map((p) => ({
+    key: p,
+    label: PLATFORM_META[p].label,
+    value: safeNum(ratingByPlatform(p)),
+    color: PLATFORM_META[p].color,
+  }));
 
-  const bannerUrl = profile?.bannerUrl || profile?.coverUrl || profile?.coverImage || null;
+  let metricConfig: { totalLabel: string; totalValue: number; segments: DonutSeg[] };
+  if (metric === "solved") {
+    const total = segmentsSolved.reduce((a, s) => a + safeNum(s.value), 0);
+    metricConfig = { totalLabel: "Problems Solved", totalValue: total, segments: segmentsSolved };
+  } else if (metric === "contests") {
+    const total = segmentsContests.reduce((a, s) => a + safeNum(s.value), 0);
+    metricConfig = { totalLabel: "Contests", totalValue: total, segments: segmentsContests };
+  } else if (metric === "rating") {
+    const total = segmentsRating.reduce((a, s) => a + safeNum(s.value), 0);
+    metricConfig = { totalLabel: "Total Rating", totalValue: total, segments: segmentsRating };
+  } else {
+    const total = segmentsOverall.reduce((a, s) => a + safeNum(s.value), 0);
+    metricConfig = { totalLabel: "Total Score", totalValue: total, segments: segmentsOverall };
+  }
 
-  const hue = hashToHue(data.id || fullname);
-
-  /* ---------------- UI ---------------- */
+  const displayEmail = data.collegeEmail || data.personalEmail || "";
 
   return (
     <div className="min-h-screen bg-[#02020a] text-slate-100 relative overflow-hidden">
@@ -468,38 +532,25 @@ export default function StudentPublicProfilePage() {
             initial={{ opacity: 0, y: 18, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.98 }}
-            className="fixed z-[80] bottom-6 left-1/2 -translate-x-1/2"
+            className="fixed z-[90] bottom-6 left-1/2 -translate-x-1/2"
           >
             <div
               className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-xs shadow-[0_30px_90px_rgba(0,0,0,0.75)]
-              ${
-                toast.ok
-                  ? "border-emerald-500/30 bg-emerald-500/10"
-                  : "border-rose-500/30 bg-rose-500/10"
-              }`}
+              ${toast.ok ? "border-emerald-500/30 bg-emerald-500/10" : "border-rose-500/30 bg-rose-500/10"}`}
             >
-              {toast.ok ? <RiCheckLine className="text-emerald-300" /> : <RiTimeLine className="text-rose-300" />}
+              {toast.ok ? (
+                <RiCheckLine className="text-emerald-300" />
+              ) : (
+                <RiTimeLine className="text-rose-300" />
+              )}
               <span className="text-slate-200">{toast.msg}</span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Platform Modal */}
-      <AnimatePresence>
-        {activePlatform && (
-          <PlatformModal
-            platform={activePlatform}
-            handle={((data.cpHandles?.[activePlatform] || "") as string).trim()}
-            stats={(data.platformStats || {})[activePlatform] || null}
-            onClose={() => setActivePlatform(null)}
-            onCopy={(h) => copyText(h, `${PLATFORM_META[activePlatform].short} handle copied`)}
-            onOpen={() => openHandle(activePlatform)}
-          />
-        )}
-      </AnimatePresence>
-
-      <main className="relative mx-auto max-w-6xl px-5 sm:px-7 lg:px-10 py-8">
+      <main className="relative mx-auto max-w-5xl px-5 sm:px-7 lg:px-10 py-8">
+        {/* Top bar */}
         <div className="flex items-center justify-between gap-3">
           <button
             onClick={() => navigate(-1)}
@@ -507,594 +558,526 @@ export default function StudentPublicProfilePage() {
           >
             <RiArrowLeftLine /> Back
           </button>
-          <div />
+
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[0.7rem] text-slate-200 backdrop-blur-xl">
+            <RiInformationLine className="text-sky-300" />
+            Public Profile
+          </div>
         </div>
 
-        {/* HERO */}
-        <section className="mt-5 overflow-hidden rounded-[28px] border border-slate-800 bg-[#050712]/70 backdrop-blur-2xl shadow-[0_30px_120px_rgba(0,0,0,0.78)]">
-          <div className="relative h-40 sm:h-44">
-            {bannerUrl ? (
-              <div className="absolute inset-0">
-                <img
-                  src={bannerUrl}
-                  alt="cover"
-                  className="h-full w-full object-cover opacity-70"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-b from-[#02020a]/20 via-[#02020a]/55 to-[#02020a]/92" />
-              </div>
-            ) : (
-              <div className="absolute inset-0">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_30%,rgba(56,189,248,0.38),transparent_45%),radial-gradient(circle_at_75%_25%,rgba(236,72,153,0.28),transparent_48%),radial-gradient(circle_at_55%_90%,rgba(74,222,128,0.24),transparent_45%)]" />
-                <div className="absolute inset-0 bg-gradient-to-b from-[#02020a]/10 via-[#02020a]/50 to-[#02020a]/95" />
-              </div>
-            )}
-
-            <div className="absolute inset-0 opacity-[0.10] bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#020617_1px,transparent_1px)] bg-[size:110px_110px]" />
-            <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle_at_1px_1px,#94a3b8_1px,transparent_0)] bg-[size:18px_18px]" />
-
-            <div className="absolute left-5 sm:left-7 top-5 flex items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[0.7rem] text-slate-200 backdrop-blur-xl">
-                <RiVerifiedBadgeLine className="text-sky-300" />
-                Public Profile
-              </span>
-            </div>
-          </div>
-
-          <div className="px-5 sm:px-7 pb-6">
-            <div className="-mt-12 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
-              {/* LEFT: Identity */}
-              <div className="flex items-end gap-4">
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.35, ease: "easeOut" }}
-                  className="relative"
-                >
-                  <div className="h-24 w-24 rounded-3xl border border-slate-700 bg-slate-950 overflow-hidden flex items-center justify-center">
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" loading="lazy" />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center">
-                        <div className="h-16 w-16 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center justify-center text-2xl font-bold">
-                          {initials}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <span className="pointer-events-none absolute -inset-1 rounded-3xl bg-gradient-to-r from-sky-500/20 via-fuchsia-500/12 to-emerald-500/18 blur-lg" />
-                </motion.div>
-
-                <div className="min-w-0 pb-1">
-                  <p className="text-xs uppercase tracking-[0.26em] text-slate-500 truncate">
-                    {data.branch || "—"}
-                    {data.section ? ` · Sec ${data.section}` : ""}
-                    {data.year ? ` · Year ${data.year}` : ""}
-                  </p>
-
-                  <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">{fullname}</h1>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/50 px-3 py-1 text-[0.75rem] text-slate-200">
-                      <RiSparkling2Line className={tier.cls} />
-                      <span className={tier.cls}>{tier.label}</span>
-                    </span>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                    <span className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/45 px-3 py-2">
-                      <RiHashtag className="text-slate-500" />
-                      Roll: <span className="text-slate-200">{data.rollNumber || "—"}</span>
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/45 px-3 py-2">
-                      <RiGraduationCapLine className="text-slate-500" />
-                      Grad: <span className="text-slate-200">{data.graduationYear || "—"}</span>
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/45 px-3 py-2">
-                      <RiFireLine className="text-fuchsia-300" />
-                      Energy: <span className="text-slate-200">{Math.round(energy * 100)}%</span>
-                    </span>
-                  </div>
-                </div>
+        {/* CARD 1 */}
+        <section className="mt-5">
+          <Card>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[0.70rem] uppercase tracking-[0.30em] text-slate-500">
+                  Student
+                </p>
+                <h1 className="mt-2 text-xl sm:text-2xl font-semibold tracking-tight truncate">
+                  {fullname}
+                </h1>
               </div>
 
-              {/* ✅ RIGHT: ULTIMATE PREMIUM HERO METRICS PANEL */}
-              <div className="w-full lg:w-[620px]">
-                <HeroMetricsPanel
-                  scoreRing={<ScoreRing value={ringScore} displayText={scoreText} size={190} />}
-                  completeness={completeness}
-                  competitive={clamp01(ringScore / 100)}
-                  totalSolved={totalSolved}
-                  linkedPlatformsCount={linkedPlatformsCount}
-                  skillsCount={skills.length}
-                />
+              <div className="text-right shrink-0">
+                <p className="text-[0.70rem] uppercase tracking-[0.30em] text-slate-500">
+                  Overall Score
+                </p>
+                <p className="mt-2 text-2xl sm:text-3xl font-bold text-sky-300 tabular-nums">
+                  {scoreText}
+                </p>
               </div>
             </div>
-
-            <div className="mt-6">
-              <TabBar
-                tab={tab}
-                setTab={setTab}
-                items={[
-                  { key: "overview", label: "Overview" },
-                  { key: "platforms", label: "Platforms" },
-                  { key: "portfolio", label: "Portfolio" },
-                ]}
-              />
-            </div>
-          </div>
+          </Card>
         </section>
 
-        {/* BODY GRID */}
-        <section className="mt-6 grid grid-cols-1 lg:grid-cols-[360px,1fr] gap-6">
-          {/* LEFT */}
-          <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-            <ProCard
-              title="About"
-              subtitle="Recruiter-style snapshot"
-              icon={<RiUser3Line className="text-sky-300" />}
-            >
-              <p className="text-xs text-slate-300 leading-relaxed">{aboutText}</p>
+        {/* CARD 2 + CARD 3 */}
+        <section className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr,1.08fr] gap-6">
+          {/* CARD 2 */}
+          <Card>
+            <CardTitle
+              title="Profile"
+              subtitle="About • details • coding links • skills • interests"
+              icon={<RiSparkling2Line className="text-sky-300" />}
+            />
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <QuickBtn
-                  onClick={() => copyText(fullname, "Name copied")}
-                  icon={<RiFileCopyLine className="text-slate-500" />}
-                  label="Copy name"
+            <div className="mt-4">
+              <p className="text-[0.65rem] uppercase tracking-[0.24em] text-slate-500">
+                About
+              </p>
+              <p className="mt-2 text-sm text-slate-300 leading-relaxed">{aboutText}</p>
+            </div>
+
+            <div className="mt-5 border-t border-white/10" />
+
+            <div className="mt-5">
+              <p className="text-[0.65rem] uppercase tracking-[0.24em] text-slate-500">
+                Details
+              </p>
+              <div className="mt-3 space-y-2 text-sm">
+                <InfoLine icon={<RiBuilding2Line className="text-slate-500" />} k="Department" v={data.branch || "—"} />
+                <InfoLine icon={<RiHashtag className="text-slate-500" />} k="Section" v={data.section || "—"} />
+                <InfoLine icon={<RiGraduationCapLine className="text-slate-500" />} k="Year" v={String(data.year ?? "—")} />
+                <InfoLine icon={<RiHashtag className="text-slate-500" />} k="Roll No" v={data.rollNumber || "—"} />
+
+                <InfoLine
+                  icon={<RiMailLine className="text-slate-500" />}
+                  k="Email"
+                  v={displayEmail || "—"}
+                  action={
+                    displayEmail ? (
+                      <MiniIconBtn
+                        title="Copy email"
+                        onClick={() => copyText(displayEmail, "Email copied")}
+                      >
+                        <RiFileCopyLine className="text-slate-300" />
+                      </MiniIconBtn>
+                    ) : null
+                  }
                 />
-                <QuickBtn
-                  onClick={() => setTab("portfolio")}
-                  icon={<RiBookmarkLine className="text-slate-500" />}
-                  label="View portfolio"
+
+                <InfoLine
+                  icon={<RiPhoneLine className="text-slate-500" />}
+                  k="Contact"
+                  v={data.phone || "—"}
+                  action={
+                    data.phone ? (
+                      <MiniIconBtn
+                        title="Copy contact"
+                        onClick={() => copyText(String(data.phone), "Contact copied")}
+                      >
+                        <RiFileCopyLine className="text-slate-300" />
+                      </MiniIconBtn>
+                    ) : null
+                  }
                 />
               </div>
-            </ProCard>
+            </div>
 
-            <ProCard
-              title="Contact"
-              subtitle="Only if shared by student"
-              icon={<RiMailLine className="text-emerald-300" />}
-            >
-              <div className="space-y-2 text-xs">
-                <Line icon={<RiBuilding2Line className="text-slate-500" />} k="Branch" v={data.branch || "—"} />
-                <Line icon={<RiHashtag className="text-slate-500" />} k="Section" v={data.section || "—"} />
-                <Line
-                  icon={<RiGraduationCapLine className="text-slate-500" />}
-                  k="Year"
-                  v={String(data.year ?? "—")}
-                />
-                <Line icon={<RiHashtag className="text-slate-500" />} k="Roll No" v={data.rollNumber || "—"} />
+            <div className="mt-5 border-t border-white/10" />
 
-                {data.collegeEmail || data.personalEmail || data.phone ? (
-                  <div className="pt-3 mt-3 border-t border-slate-800/80 space-y-2">
-                    {data.collegeEmail && (
-                      <Line icon={<RiMailLine className="text-slate-500" />} k="College" v={data.collegeEmail} mono />
-                    )}
-                    {data.personalEmail && (
-                      <Line icon={<RiMailLine className="text-slate-500" />} k="Personal" v={data.personalEmail} mono />
-                    )}
-                    {data.phone && <Line icon={<RiPhoneLine className="text-slate-500" />} k="Phone" v={data.phone} mono />}
-                  </div>
+            <div className="mt-5">
+              <p className="text-[0.65rem] uppercase tracking-[0.24em] text-slate-500">
+                Coding Profiles
+              </p>
+              <div className="mt-3 space-y-3">
+                {linkedPlatforms.length ? (
+                  linkedPlatforms.map((p) => {
+                    const handle = ((data.cpHandles?.[p] || "") as string).trim();
+                    return (
+                      <ProfileLinkRow
+                        key={p}
+                        platform={p}
+                        handle={handle}
+                        onOpen={() => openHandle(p)}
+                        onCopy={() => copyText(handle, `${PLATFORM_META[p].label} handle copied`)}
+                      />
+                    );
+                  })
                 ) : (
-                  <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
-                    <p className="text-[0.72rem] text-slate-500">No contact details shared publicly.</p>
-                  </div>
+                  <EmptyNote text="No coding profiles linked yet." />
                 )}
               </div>
-            </ProCard>
+            </div>
 
-            <ProCard
-              title="Skills & Interests"
-              subtitle="From student portfolio"
-              icon={<RiStarSmileLine className="text-fuchsia-300" />}
-            >
-              {skills.length ? (
-                <>
-                  <p className="text-[0.65rem] uppercase tracking-[0.22em] text-slate-500">Skills</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {skills.slice(0, 16).map((s, i) => (
-                      <Chip key={`${s}-${i}`} text={s} icon={<RiStarSmileLine />} />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <EmptyNote text="No skills added." />
-              )}
+            <div className="mt-5 border-t border-white/10" />
 
-              {interests.length ? (
-                <>
-                  <p className="mt-4 text-[0.65rem] uppercase tracking-[0.22em] text-slate-500">Interests</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {interests.slice(0, 16).map((s, i) => (
-                      <Chip key={`${s}-${i}`} text={s} icon={<RiPulseLine />} />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="mt-3">
+            <div className="mt-5">
+              <p className="text-[0.65rem] uppercase tracking-[0.24em] text-slate-500">
+                Skills
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {skills.length ? (
+                  skills.slice(0, 18).map((s, i) => <Chip key={`${s}-${i}`} text={s} />)
+                ) : (
+                  <EmptyNote text="No skills added." />
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <p className="text-[0.65rem] uppercase tracking-[0.24em] text-slate-500">
+                Interests
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {interests.length ? (
+                  interests.slice(0, 18).map((s, i) => <Chip key={`${s}-${i}`} text={s} />)
+                ) : (
                   <EmptyNote text="No interests added." />
-                </div>
-              )}
-            </ProCard>
-          </aside>
+                )}
+              </div>
+            </div>
+          </Card>
 
-          {/* RIGHT */}
-          <section className="space-y-6">
-            <AnimatePresence mode="wait">
-              {/* OVERVIEW */}
-              {tab === "overview" && (
+          {/* CARD 3 */}
+          <Card>
+            <CardTitle
+              title="Coding Profiles"
+              subtitle="Overall • solved • contests • rating"
+              icon={<RiLinksLine className="text-sky-300" />}
+            />
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-white/10 pb-3">
+              <MetricTab active={metric === "overall"} onClick={() => setMetric("overall")} label="Overall Score" />
+              <MetricTab active={metric === "solved"} onClick={() => setMetric("solved")} label="Problems Solved" />
+              <MetricTab active={metric === "contests"} onClick={() => setMetric("contests")} label="Contests" />
+              <MetricTab active={metric === "rating"} onClick={() => setMetric("rating")} label="Rating" />
+            </div>
+
+            <div className="mt-5 flex items-center justify-center">
+              <DonutChart
+                totalLabel={metricConfig.totalLabel}
+                totalValue={metricConfig.totalValue}
+                segments={metricConfig.segments}
+              />
+            </div>
+          </Card>
+        </section>
+
+        {/* CARD 4 */}
+        <section className="mt-6">
+          <Card>
+            <button
+              onClick={() => setPortfolioOpen((v) => !v)}
+              className="w-full flex items-center justify-between gap-3"
+              type="button"
+            >
+              <div className="text-left">
+                <p className="text-sm font-semibold text-slate-50">Portfolio</p>
+                <p className="mt-1 text-[0.75rem] text-slate-500">
+                  Internships • Projects • Certifications
+                </p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-slate-200">
+                {portfolioOpen ? "Hide" : "Show"}
+              </span>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {portfolioOpen && (
                 <motion.div
-                  key="overview"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.22 }}
-                  className="space-y-6"
+                  className="overflow-hidden"
                 >
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <ProCard
-                      title="Platform Contribution"
-                      subtitle="What’s powering the score"
-                      icon={<RiMedalLine className="text-amber-300" />}
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {PLATFORM_ORDER.map((k) => {
-                          const meta = PLATFORM_META[k];
-                          const handle = ((data.cpHandles?.[k] || "") as string).trim();
-                          const v = safeNum(platformSkills?.[k] ?? 0);
-                          const active = !!handle || v > 0;
-                          const pct = clamp01(v / maxPlatformSkill);
+                  <div className="mt-5 border-t border-white/10" />
+                  <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <PortCol title="Internships" icon={<RiBuilding2Line className="text-emerald-300" />}>
+                      {internships.length ? (
+                        internships.slice(0, 6).map((x: any, idx: number) => (
+                          <MiniItem
+                            key={idx}
+                            title={x?.company || x?.title || "Internship"}
+                            sub={x?.role || x?.description || "—"}
+                            meta={x?.duration || x?.time || x?.year || null}
+                          />
+                        ))
+                      ) : (
+                        <EmptyNote text="No internships added." />
+                      )}
+                    </PortCol>
 
-                          return (
-                            <motion.button
-                              key={k}
-                              whileHover={active ? { y: -2 } : undefined}
-                              onClick={() => (active ? setActivePlatform(k) : null)}
-                              className={`text-left rounded-[22px] border overflow-hidden transition ${
-                                active
-                                  ? "border-slate-800 bg-slate-950/45 hover:border-sky-400/60"
-                                  : "border-slate-900 bg-slate-950/20 opacity-70 cursor-not-allowed"
-                              }`}
-                            >
-                              <div className={`h-8 bg-gradient-to-r ${meta.glow} ${active ? "opacity-80" : "opacity-35"}`} />
-                              <div className="p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className={`${meta.colorClass} text-base shrink-0`}>{meta.icon}</span>
-                                      <p className="text-sm font-semibold text-slate-100 truncate">
-                                        {meta.label}
-                                      </p>
-                                    </div>
-                                    <p className="mt-1 text-[0.72rem] text-slate-500 truncate">
-                                      {handle ? `@${handle}` : "not linked"}
-                                    </p>
-                                  </div>
+                    <PortCol title="Projects" icon={<RiSparkling2Line className="text-sky-300" />}>
+                      {projects.length ? (
+                        projects.slice(0, 6).map((p: any, idx: number) => (
+                          <MiniItem
+                            key={idx}
+                            title={p?.title || p?.name || "Project"}
+                            sub={p?.description || p?.summary || "—"}
+                            meta={p?.stack || p?.tech || p?.role || null}
+                            link={p?.link || p?.url || null}
+                            onCopy={(url) => copyText(url, "Link copied")}
+                            onOpen={(url) => window.open(url, "_blank", "noopener,noreferrer")}
+                          />
+                        ))
+                      ) : (
+                        <EmptyNote text="No projects added." />
+                      )}
+                    </PortCol>
 
-                                  <div className="shrink-0 text-right">
-                                    <p className="text-[0.62rem] uppercase tracking-[0.22em] text-slate-500">
-                                      Points
-                                    </p>
-                                    <p className="mt-1 text-sm font-semibold text-slate-100 tabular-nums">
-                                      {v ? v.toLocaleString("en-IN") : "—"}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="mt-3">
-                                  <div className="h-2 rounded-full bg-slate-950/70 border border-slate-800 overflow-hidden">
-                                    <motion.div
-                                      initial={{ width: 0 }}
-                                      animate={{ width: `${Math.round(pct * 100)}%` }}
-                                      transition={{ duration: 0.6, ease: "easeOut" }}
-                                      className="h-full rounded-full bg-gradient-to-r from-sky-400/70 via-fuchsia-400/55 to-emerald-400/60"
-                                    />
-                                  </div>
-                                  <p className="mt-2 text-[0.72rem] text-slate-500">Tap to view stats</p>
-                                </div>
-                              </div>
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-                    </ProCard>
-
-                    <ProCard
-                      title="Executive Snapshot"
-                      subtitle="Fast signals (auto-derived)"
-                      icon={<RiSparkling2Line className="text-sky-300" />}
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <Kpi
-                          icon={<RiTrophyLine className="text-amber-300" />}
-                          label="Tier"
-                          value={tier.label}
-                          hint={tier.hint}
-                          accent={tier.cls}
-                        />
-                        <Kpi
-                          icon={<RiShieldCheckLine className="text-emerald-300" />}
-                          label="Profile strength"
-                          value={skills.length >= 6 ? "Strong" : skills.length ? "Medium" : "—"}
-                          hint="Skills + portfolio signals"
-                        />
-                        <Kpi
-                          icon={<RiBarChart2Line className="text-sky-300" />}
-                          label="Platforms linked"
-                          value={`${linkedPlatformsCount}/6`}
-                          hint="Handles connected"
-                        />
-                        <Kpi
-                          icon={<RiPulseLine className="text-fuchsia-300" />}
-                          label="Momentum"
-                          value={`${Math.round(energy * 100)}%`}
-                          hint="Score + linked platforms"
-                        />
-                      </div>
-
-                      <div className="mt-5 rounded-3xl border border-slate-800 bg-slate-950/40 p-4">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[0.65rem] uppercase tracking-[0.22em] text-slate-500">
-                            Quick actions
-                          </p>
-                          <span className="text-[0.7rem] text-slate-500 inline-flex items-center gap-2">
-                            <RiInformationLine /> safe external links
-                          </span>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {linkedPlatforms.slice(0, 4).map((p) => (
-                            <button
-                              key={p}
-                              onClick={() => openHandle(p)}
-                              className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-[#050712] px-3 py-2 text-xs text-slate-200 hover:border-sky-400 transition"
-                            >
-                              <span className={PLATFORM_META[p].colorClass}>{PLATFORM_META[p].icon}</span>
-                              Open {PLATFORM_META[p].short}
-                              <RiArrowRightUpLine className="text-slate-500" />
-                            </button>
-                          ))}
-                          {!linkedPlatforms.length && (
-                            <span className="text-xs text-slate-500">No linked platforms yet.</span>
-                          )}
-                        </div>
-                      </div>
-                    </ProCard>
+                    <PortCol title="Certifications" icon={<RiBookmarkLine className="text-indigo-300" />}>
+                      {certifications.length ? (
+                        certifications.slice(0, 8).map((c: any, idx: number) => (
+                          <MiniItem
+                            key={idx}
+                            title={c?.name || c?.title || "Certification"}
+                            sub={c?.issuer || c?.provider || c?.description || "—"}
+                            meta={c?.year || c?.date || null}
+                            link={c?.link || c?.url || null}
+                            onCopy={(url) => copyText(url, "Link copied")}
+                            onOpen={(url) => window.open(url, "_blank", "noopener,noreferrer")}
+                          />
+                        ))
+                      ) : (
+                        <EmptyNote text="No certifications added." />
+                      )}
+                    </PortCol>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <InsightCard
-                      title="Solved volume"
-                      value={formatValue(totalSolved)}
-                      icon={<RiTrophyLine className="text-amber-300" />}
-                      sub="Sum across platforms"
-                    />
-                    <InsightCard
-                      title="Portfolio items"
-                      value={formatValue(projects.length + internships.length + certifications.length)}
-                      icon={<RiBookmarkLine className="text-sky-300" />}
-                      sub="Projects + internships + certs"
-                    />
-                    <InsightCard
-                      title="Shareable profile"
-                      value="Ready"
-                      icon={<RiInformationLine className="text-emerald-300" />}
-                      sub="Open handles from Platforms tab"
-                    />
-                  </div>
-                </motion.div>
-              )}
-
-              {/* PLATFORMS */}
-              {tab === "platforms" && (
-                <motion.div
-                  key="platforms"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ duration: 0.22 }}
-                  className="space-y-6"
-                >
-                  <ProCard
-                    title="Platform Stats"
-                    subtitle="Tap a platform to drill down"
-                    icon={<RiBarChart2Line className="text-sky-300" />}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {PLATFORM_ORDER.map((p) => {
-                        const meta = PLATFORM_META[p];
-                        const handle = ((data.cpHandles?.[p] || "") as string).trim();
-                        const linked = !!handle;
-
-                        const solved = solvedByPlatform(p);
-                        const rating = ratingByPlatform(p);
-                        const contests = contestsByPlatform(p);
-
-                        return (
-                          <motion.button
-                            key={p}
-                            whileHover={linked ? { y: -3 } : undefined}
-                            onClick={() => (linked ? setActivePlatform(p) : null)}
-                            className={`text-left rounded-[24px] border bg-slate-950/40 overflow-hidden transition ${
-                              linked ? "border-slate-800 hover:border-sky-400/60" : "border-slate-900 opacity-70 cursor-not-allowed"
-                            }`}
-                          >
-                            <div className={`h-9 bg-gradient-to-r ${meta.glow} ${linked ? "opacity-85" : "opacity-35"}`} />
-                            <div className="p-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className={`${meta.colorClass} text-lg shrink-0`}>{meta.icon}</span>
-                                    <p className="text-sm font-semibold text-slate-100 truncate">
-                                      {meta.label}
-                                    </p>
-                                  </div>
-                                  <p className="mt-1 text-[0.72rem] text-slate-500 truncate">
-                                    {handle ? `@${handle}` : "not linked"}
-                                  </p>
-                                </div>
-
-                                <span className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-[#050712] px-3 py-2 text-xs text-slate-200">
-                                  View <RiArrowRightUpLine className="text-slate-500" />
-                                </span>
-                              </div>
-
-                              <div className="mt-4 grid grid-cols-3 gap-2">
-                                <MiniStatBox label="Solved" value={solved} />
-                                <MiniStatBox label="Rating" value={rating} />
-                                <MiniStatBox label="Contests" value={contests} />
-                              </div>
-
-                              {!linked && (
-                                <p className="mt-3 text-[0.72rem] text-slate-500">Link handle to show stats.</p>
-                              )}
-                            </div>
-                          </motion.button>
-                        );
-                      })}
-                    </div>
-                  </ProCard>
-                </motion.div>
-              )}
-
-              {/* PORTFOLIO */}
-              {tab === "portfolio" && (
-                <motion.div
-                  key="portfolio"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ duration: 0.22 }}
-                  className="space-y-6"
-                >
-                  <ProCard
-                    title="Portfolio"
-                    subtitle="Clean, recruiter-readable blocks"
-                    icon={<RiBookmarkLine className="text-emerald-300" />}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <GlassBlock title="About" icon={<RiShieldCheckLine className="text-emerald-300" />}>
-                        <p className="text-xs text-slate-300 leading-relaxed">{aboutText}</p>
-                      </GlassBlock>
-
-                      <GlassBlock title="Highlights" icon={<RiMedalLine className="text-amber-300" />}>
-                        <ul className="space-y-2 text-xs text-slate-300">
-                          <li className="flex items-center justify-between">
-                            <span className="text-slate-500">Tier</span>
-                            <span className={`font-semibold ${tier.cls}`}>{tier.label}</span>
-                          </li>
-                          <li className="flex items-center justify-between">
-                            <span className="text-slate-500">Platforms linked</span>
-                            <span className="font-semibold text-slate-100 tabular-nums">
-                              {linkedPlatformsCount}/6
-                            </span>
-                          </li>
-                          <li className="flex items-center justify-between">
-                            <span className="text-slate-500">Solved (sum)</span>
-                            <span className="font-semibold text-slate-100 tabular-nums">
-                              {formatValue(totalSolved)}
-                            </span>
-                          </li>
-                        </ul>
-                      </GlassBlock>
-                    </div>
-
-                    <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <GlassBlock title="Projects" icon={<RiSparkling2Line className="text-sky-300" />}>
-                        {projects.length ? (
-                          <div className="space-y-3">
-                            {projects.slice(0, 4).map((p: any, idx: number) => (
-                              <PortfolioRow
-                                key={idx}
-                                title={p?.title || p?.name || "Untitled"}
-                                subtitle={p?.description || p?.summary || "—"}
-                                meta={p?.stack || p?.tech || p?.role || null}
-                                link={p?.link || p?.url || null}
-                                onCopy={(txt) => copyText(txt, "Copied")}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <EmptyNote text="No projects added." />
-                        )}
-                      </GlassBlock>
-
-                      <GlassBlock title="Experience & Certifications" icon={<RiTrophyLine className="text-fuchsia-300" />}>
-                        {internships.length || certifications.length ? (
-                          <div className="space-y-3">
-                            {internships.slice(0, 2).map((x: any, idx: number) => (
-                              <PortfolioRow
-                                key={`intern-${idx}`}
-                                title={x?.company || x?.title || "Internship"}
-                                subtitle={x?.role || x?.description || "—"}
-                                meta={x?.duration || x?.time || null}
-                                link={x?.link || x?.url || null}
-                                onCopy={(txt) => copyText(txt, "Copied")}
-                              />
-                            ))}
-                            {certifications.slice(0, 2).map((c: any, idx: number) => (
-                              <PortfolioRow
-                                key={`cert-${idx}`}
-                                title={c?.name || c?.title || "Certification"}
-                                subtitle={c?.issuer || c?.provider || "—"}
-                                meta={c?.year || c?.date || null}
-                                link={c?.link || c?.url || null}
-                                onCopy={(txt) => copyText(txt, "Copied")}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <EmptyNote text="No internships/certifications added." />
-                        )}
-                      </GlassBlock>
-                    </div>
-
-                    <div className="mt-5">
-                      <GlassBlock title="Links" icon={<RiLinksLine className="text-indigo-300" />}>
-                        {links.length ? (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {links.slice(0, 6).map((l: any, idx: number) => (
-                              <button
-                                key={idx}
-                                onClick={() => (l?.url ? window.open(l.url, "_blank", "noopener,noreferrer") : null)}
-                                className="text-left rounded-2xl border border-slate-800 bg-[#050712] px-4 py-3 hover:border-sky-400/60 transition"
-                              >
-                                <p className="text-xs font-semibold text-slate-200 truncate">
-                                  {l?.label || l?.title || "Link"}
-                                </p>
-                                <p className="mt-1 text-[0.72rem] text-slate-500 truncate">{l?.url || "—"}</p>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <EmptyNote text="No links added." />
-                        )}
-                      </GlassBlock>
-                    </div>
-                  </ProCard>
                 </motion.div>
               )}
             </AnimatePresence>
-
-            <div className="rounded-[26px] border border-slate-800 bg-[#050712]/55 p-4">
-              <p className="text-[0.7rem] uppercase tracking-[0.28em] text-slate-500">Public view</p>
-              <p className="mt-2 text-xs text-slate-300 leading-relaxed">
-                Designed for fast leaderboard exploration — clean scanning, crisp stats, safe links, premium UI.
-              </p>
-            </div>
-          </section>
+          </Card>
         </section>
       </main>
     </div>
   );
 }
 
-/* ---------------- LOADING / ERROR ---------------- */
+/* ---------------- SMALL UI HELPERS ---------------- */
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-[28px] border border-slate-800 bg-[#050712]/78 backdrop-blur-2xl shadow-[0_22px_90px_rgba(0,0,0,0.74)] p-5 sm:p-6">
+      {children}
+    </div>
+  );
+}
+
+function CardTitle({
+  title,
+  subtitle,
+  icon,
+}: {
+  title: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-slate-50">{title}</p>
+        {subtitle ? <p className="mt-1 text-[0.75rem] text-slate-500">{subtitle}</p> : null}
+      </div>
+      <div className="h-10 w-10 rounded-2xl border border-slate-800 bg-slate-950/50 flex items-center justify-center">
+        {icon}
+      </div>
+    </div>
+  );
+}
+
+function MetricTab({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative px-3 py-2 text-sm transition ${
+        active ? "text-sky-300" : "text-slate-400 hover:text-slate-200"
+      }`}
+      type="button"
+    >
+      <span className="relative z-[1]">{label}</span>
+      {active && <span className="absolute left-0 right-0 -bottom-[13px] h-[2px] bg-sky-500/80" />}
+    </button>
+  );
+}
+
+function InfoLine({
+  icon,
+  k,
+  v,
+  action,
+}: {
+  icon: React.ReactNode;
+  k: string;
+  v: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center gap-2 text-slate-400 min-w-0">
+        <span className="text-base shrink-0">{icon}</span>
+        <span className="text-slate-500 shrink-0">{k}</span>
+      </div>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-right text-slate-200 truncate max-w-[240px]">{v}</span>
+        {action}
+      </div>
+    </div>
+  );
+}
+
+function MiniIconBtn({
+  title,
+  onClick,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      type="button"
+      title={title}
+      className="h-8 w-8 rounded-xl border border-slate-800 bg-[#050712] flex items-center justify-center hover:border-sky-400/60 transition"
+    >
+      {children}
+    </button>
+  );
+}
+
+function Chip({ text }: { text: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/50 px-3 py-1 text-xs text-slate-200">
+      {text}
+    </span>
+  );
+}
+
+function EmptyNote({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
+      <p className="text-xs text-slate-500">{text}</p>
+    </div>
+  );
+}
+
+function ProfileLinkRow({
+  platform,
+  handle,
+  onOpen,
+  onCopy,
+}: {
+  platform: PlatformKey;
+  handle: string;
+  onOpen: () => void;
+  onCopy: () => void;
+}) {
+  const meta = PLATFORM_META[platform];
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className="h-10 w-10 rounded-full flex items-center justify-center font-semibold text-sm border border-white/10 shrink-0"
+          style={{ background: `${meta.color}22` }}
+        >
+          <span style={{ color: meta.color }}>{meta.badge}</span>
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-sm text-slate-200 truncate flex items-center gap-2">
+            <span className="text-slate-400">{meta.icon}</span>
+            {meta.label}
+          </p>
+          <button
+            onClick={onOpen}
+            className="text-left text-sky-300 hover:text-sky-200 transition truncate"
+            type="button"
+          >
+            {handle}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={onCopy}
+          type="button"
+          className="h-9 w-9 rounded-xl border border-slate-800 bg-[#050712] flex items-center justify-center hover:border-sky-400/60 transition"
+          title="Copy handle"
+        >
+          <RiFileCopyLine className="text-slate-300" />
+        </button>
+        <button
+          onClick={onOpen}
+          type="button"
+          className="h-9 w-9 rounded-xl border border-slate-800 bg-[#050712] flex items-center justify-center hover:border-sky-400/60 transition"
+          title="Open"
+        >
+          <RiExternalLinkLine className="text-slate-300" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PortCol({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-[#070816]/45 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-100">{title}</p>
+        <div className="h-9 w-9 rounded-2xl border border-white/10 bg-black/20 flex items-center justify-center">
+          {icon}
+        </div>
+      </div>
+      <div className="mt-3 space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function MiniItem({
+  title,
+  sub,
+  meta,
+  link,
+  onCopy,
+  onOpen,
+}: {
+  title: string;
+  sub: string;
+  meta?: string | null;
+  link?: string | null;
+  onCopy?: (url: string) => void;
+  onOpen?: (url: string) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-[#050712] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-200 truncate">{title}</p>
+          <p className="mt-1 text-xs text-slate-500 line-clamp-2">{sub}</p>
+          {meta ? <p className="mt-2 text-xs text-slate-400 truncate">{meta}</p> : null}
+        </div>
+
+        {link ? (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => onCopy?.(link)}
+              type="button"
+              className="h-9 w-9 rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center hover:border-sky-400/60 transition"
+              title="Copy link"
+            >
+              <RiFileCopyLine className="text-slate-300" />
+            </button>
+            <button
+              onClick={() => onOpen?.(link)}
+              type="button"
+              className="h-9 w-9 rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center hover:border-sky-400/60 transition"
+              title="Open"
+            >
+              <RiExternalLinkLine className="text-slate-300" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- LOADING / ERROR / BG ---------------- */
 
 function LoadingShell({ onBack }: { onBack: () => void }) {
   return (
     <div className="min-h-screen bg-[#02020a] text-slate-100 relative overflow-hidden">
       <BgPro hue={210} />
-      <main className="relative mx-auto max-w-6xl px-5 sm:px-7 lg:px-10 py-8">
+      <main className="relative mx-auto max-w-5xl px-5 sm:px-7 lg:px-10 py-8">
         <div className="flex items-center justify-between">
           <button
             onClick={onBack}
@@ -1104,39 +1087,13 @@ function LoadingShell({ onBack }: { onBack: () => void }) {
           </button>
           <div className="h-8 w-28 rounded-xl bg-slate-900/60 border border-slate-800 animate-pulse" />
         </div>
-
-        <div className="mt-6 rounded-[28px] border border-slate-800 bg-[#050712]/70 overflow-hidden">
-          <div className="h-44 bg-slate-900/40 animate-pulse" />
-          <div className="p-6 grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
-            <div className="flex items-center gap-4">
-              <div className="h-20 w-20 rounded-3xl bg-slate-900/60 border border-slate-800 animate-pulse" />
-              <div className="flex-1">
-                <div className="h-4 w-44 rounded bg-slate-900/60 border border-slate-800 animate-pulse" />
-                <div className="mt-3 h-8 w-72 rounded bg-slate-900/60 border border-slate-800 animate-pulse" />
-                <div className="mt-3 h-4 w-56 rounded bg-slate-900/60 border border-slate-800 animate-pulse" />
-              </div>
-            </div>
-            <div className="h-44 rounded-[28px] bg-slate-900/30 border border-slate-800 animate-pulse" />
+        <div className="mt-6 space-y-6">
+          <div className="h-24 rounded-[28px] bg-slate-900/30 border border-slate-800 animate-pulse" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="h-[560px] rounded-[28px] bg-slate-900/30 border border-slate-800 animate-pulse" />
+            <div className="h-[560px] rounded-[28px] bg-slate-900/30 border border-slate-800 animate-pulse" />
           </div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-[360px,1fr] gap-6">
-          <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-44 rounded-[28px] bg-slate-900/30 border border-slate-800 animate-pulse"
-              />
-            ))}
-          </div>
-          <div className="space-y-4">
-            {Array.from({ length: 2 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-80 rounded-[28px] bg-slate-900/30 border border-slate-800 animate-pulse"
-              />
-            ))}
-          </div>
+          <div className="h-28 rounded-[28px] bg-slate-900/30 border border-slate-800 animate-pulse" />
         </div>
       </main>
     </div>
@@ -1161,519 +1118,29 @@ function ErrorShell({ message, onBack }: { message: string; onBack: () => void }
   );
 }
 
-/* ---------------- BACKGROUND (PRO) ---------------- */
-
 function BgPro({ hue }: { hue: number }) {
   return (
     <div className="pointer-events-none absolute inset-0">
       <div
         className="absolute -top-40 left-[-60px] h-96 w-96 rounded-full blur-3xl"
         style={{
-          background: `radial-gradient(circle at center, hsla(${hue}, 90%, 60%, 0.26), transparent 60%)`,
+          background: `radial-gradient(circle at center, hsla(${hue}, 90%, 60%, 0.24), transparent 60%)`,
         }}
       />
       <div
         className="absolute top-[35%] right-[-140px] h-96 w-96 rounded-full blur-3xl"
         style={{
-          background: `radial-gradient(circle at center, hsla(${(hue + 120) % 360}, 90%, 60%, 0.18), transparent 60%)`,
+          background: `radial-gradient(circle at center, hsla(${(hue + 120) % 360}, 90%, 60%, 0.16), transparent 60%)`,
         }}
       />
       <div
         className="absolute bottom-[-140px] left-[20%] h-80 w-80 rounded-full blur-3xl"
         style={{
-          background: `radial-gradient(circle at center, hsla(${(hue + 240) % 360}, 90%, 60%, 0.16), transparent 60%)`,
+          background: `radial-gradient(circle at center, hsla(${(hue + 240) % 360}, 90%, 60%, 0.14), transparent 60%)`,
         }}
       />
       <div className="absolute inset-0 opacity-[0.12] bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#020617_1px,transparent_1px)] bg-[size:90px_90px]" />
       <div className="absolute inset-0 opacity-[0.06] bg-[radial-gradient(circle_at_1px_1px,#94a3b8_1px,transparent_0)] bg-[size:18px_18px]" />
     </div>
-  );
-}
-
-/* ---------------- HERO METRICS (ULTIMATE) ---------------- */
-
-function HeroMetricsPanel({
-  scoreRing,
-  completeness,
-  competitive,
-  totalSolved,
-  linkedPlatformsCount,
-  skillsCount,
-}: {
-  scoreRing: React.ReactNode;
-  completeness: number;
-  competitive: number;
-  totalSolved: number;
-  linkedPlatformsCount: number;
-  skillsCount: number;
-}) {
-  return (
-    <div className="relative overflow-hidden rounded-[28px] border border-slate-800 bg-[#050712]/70 backdrop-blur-2xl shadow-[0_30px_120px_rgba(0,0,0,0.7)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.18),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(236,72,153,0.14),transparent_35%),radial-gradient(circle_at_70%_95%,rgba(74,222,128,0.10),transparent_40%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-[0.10] bg-[radial-gradient(circle_at_1px_1px,#94a3b8_1px,transparent_0)] bg-[size:18px_18px]" />
-
-      <div className="relative p-4 sm:p-5">
-        <div className="grid grid-cols-1 sm:grid-cols-[220px,1fr] gap-5 items-center">
-          <div className="flex items-center justify-center">
-            <div className="relative">
-              <div className="absolute -inset-3 rounded-full bg-gradient-to-r from-sky-500/15 via-fuchsia-500/10 to-emerald-500/12 blur-2xl" />
-              <div className="relative">{scoreRing}</div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-3">
-              <SignalMeterPro label="Profile completeness" value={completeness} />
-              <SignalMeterPro label="Competitive signal" value={competitive} />
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <MiniPill
-                icon={<RiTrophyLine className="text-amber-300" />}
-                label="Solved"
-                value={formatValue(totalSolved)}
-              />
-              <MiniPill
-                icon={<RiBarChart2Line className="text-sky-300" />}
-                label="Platforms"
-                value={formatValue(linkedPlatformsCount)}
-              />
-              <MiniPill
-                icon={<RiShieldCheckLine className="text-emerald-300" />}
-                label="Skills"
-                value={formatValue(skillsCount)}
-              />
-            </div>
-
-            <div className="pt-1">
-              <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-slate-700/50 to-transparent" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SignalMeterPro({ label, value }: { label: string; value: number }) {
-  const pct = Math.round(clamp01(value) * 100);
-
-  return (
-    <div className="rounded-2xl border border-slate-800/80 bg-slate-950/30 px-4 py-3">
-      <div className="flex items-center justify-between">
-        <p className="text-[0.68rem] uppercase tracking-[0.28em] text-slate-500">{label}</p>
-        <p className="text-[0.75rem] font-semibold text-slate-300 tabular-nums">{pct}%</p>
-      </div>
-
-      <div className="mt-2 h-2.5 rounded-full bg-[#030414] border border-slate-800 overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.7, ease: "easeOut" }}
-          className="h-full rounded-full bg-gradient-to-r from-sky-400/90 via-fuchsia-400/70 to-emerald-400/80"
-        />
-      </div>
-    </div>
-  );
-}
-
-function MiniPill({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-slate-800/80 bg-slate-950/35 px-3 py-3">
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="h-9 w-9 rounded-xl border border-slate-800 bg-[#050712] flex items-center justify-center shrink-0">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[0.62rem] uppercase tracking-[0.22em] text-slate-500 truncate">{label}</p>
-          <p className="mt-1 text-sm font-semibold text-slate-100 tabular-nums truncate">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- UI COMPONENTS ---------------- */
-
-function ProCard({
-  title,
-  subtitle,
-  icon,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-[28px] border border-slate-800 bg-[#050712]/75 backdrop-blur-2xl shadow-[0_22px_90px_rgba(0,0,0,0.74)] overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-800/80 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-50">{title}</p>
-          {subtitle && <p className="mt-1 text-[0.72rem] text-slate-500">{subtitle}</p>}
-        </div>
-        <div className="h-10 w-10 rounded-2xl border border-slate-800 bg-slate-950/50 flex items-center justify-center">
-          {icon}
-        </div>
-      </div>
-      <div className="px-5 py-4">{children}</div>
-    </div>
-  );
-}
-
-function TabBar<T extends string>({
-  tab,
-  setTab,
-  items,
-}: {
-  tab: T;
-  setTab: (t: T) => void;
-  items: { key: T; label: string }[];
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950/30 p-2">
-      {items.map((it) => {
-        const active = tab === it.key;
-        return (
-          <button
-            key={it.key}
-            onClick={() => setTab(it.key)}
-            className={`relative inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs transition ${
-              active ? "text-slate-50" : "text-slate-300 hover:text-slate-50"
-            }`}
-          >
-            {active && (
-              <motion.span
-                layoutId="tab-pill"
-                className="absolute inset-0 rounded-xl border border-slate-700 bg-[#050712]"
-                transition={{ type: "spring", stiffness: 420, damping: 32 }}
-              />
-            )}
-            <span className="relative">{it.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function QuickBtn({
-  onClick,
-  icon,
-  label,
-}: {
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#050712] px-3 py-2 text-xs text-slate-200 hover:border-sky-400 transition"
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function Line({
-  icon,
-  k,
-  v,
-  mono,
-}: {
-  icon: React.ReactNode;
-  k: string;
-  v: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-center gap-2 text-slate-400">
-        <span className="text-base">{icon}</span>
-        <span className="text-slate-500">{k}</span>
-      </div>
-      <span className={`text-right text-slate-200 ${mono ? "font-mono text-[0.75rem]" : ""}`}>
-        {v}
-      </span>
-    </div>
-  );
-}
-
-function Chip({ icon, text }: { icon: React.ReactNode; text: string }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/50 px-3 py-1 text-xs text-slate-200">
-      <span className="text-slate-500">{icon}</span>
-      {text}
-    </span>
-  );
-}
-
-function EmptyNote({ text }: { text: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
-      <p className="text-xs text-slate-500">{text}</p>
-    </div>
-  );
-}
-
-function Kpi({
-  icon,
-  label,
-  value,
-  hint,
-  accent,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  hint: string;
-  accent?: string;
-}) {
-  return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.15 }}
-      className="rounded-3xl border border-slate-800 bg-slate-950/45 p-4"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[0.65rem] uppercase tracking-[0.22em] text-slate-500">{label}</p>
-          <p className={`mt-2 text-lg font-semibold text-slate-50 ${accent || ""}`}>{value}</p>
-          <p className="mt-1 text-[0.72rem] text-slate-500">{hint}</p>
-        </div>
-        <div className="h-10 w-10 rounded-2xl border border-slate-800 bg-[#050712] flex items-center justify-center">
-          {icon}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function InsightCard({
-  title,
-  value,
-  icon,
-  sub,
-}: {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-  sub: string;
-}) {
-  return (
-    <div className="rounded-[28px] border border-slate-800 bg-slate-950/35 p-5 overflow-hidden relative">
-      <div className="absolute -top-14 -right-14 h-44 w-44 rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.16),_transparent_60%)] blur-2xl" />
-      <div className="relative">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-slate-200">{title}</p>
-          <div className="h-10 w-10 rounded-2xl border border-slate-800 bg-[#050712] flex items-center justify-center">
-            {icon}
-          </div>
-        </div>
-        <p className="mt-3 text-2xl font-bold text-slate-50 tabular-nums">{value}</p>
-        <p className="mt-2 text-[0.75rem] text-slate-500">{sub}</p>
-      </div>
-    </div>
-  );
-}
-
-function MiniStatBox({ label, value }: { label: string; value: any }) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-[#050712] px-3 py-2 min-w-0 overflow-hidden">
-      <p className="text-[0.60rem] uppercase tracking-[0.16em] text-slate-500 truncate">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-100 tabular-nums truncate">{formatValue(value)}</p>
-    </div>
-  );
-}
-
-function GlassBlock({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-[28px] border border-slate-800 bg-slate-950/30 p-4 overflow-hidden relative">
-      <div className="absolute -top-16 -right-16 h-44 w-44 rounded-full bg-[radial-gradient(circle_at_center,_rgba(236,72,153,0.16),_transparent_60%)] blur-2xl" />
-      <div className="relative">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-slate-200">{title}</p>
-          <div className="h-10 w-10 rounded-2xl border border-slate-800 bg-[#050712] flex items-center justify-center">
-            {icon}
-          </div>
-        </div>
-        <div className="mt-3">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function PortfolioRow({
-  title,
-  subtitle,
-  meta,
-  link,
-  onCopy,
-}: {
-  title: string;
-  subtitle: string;
-  meta?: string | null;
-  link?: string | null;
-  onCopy: (txt: string) => void;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-[#050712] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-slate-200 truncate">{title}</p>
-          <p className="mt-1 text-[0.72rem] text-slate-500 line-clamp-2">{subtitle}</p>
-          {meta ? <p className="mt-2 text-[0.72rem] text-slate-400 truncate">{meta}</p> : null}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {link ? (
-            <>
-              <button
-                onClick={() => onCopy(link)}
-                className="h-9 w-9 rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center hover:border-sky-400/60 transition"
-                title="Copy link"
-              >
-                <RiFileCopyLine className="text-slate-400" />
-              </button>
-              <button
-                onClick={() => window.open(link, "_blank", "noopener,noreferrer")}
-                className="h-9 w-9 rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center hover:border-sky-400/60 transition"
-                title="Open"
-              >
-                <RiExternalLinkLine className="text-slate-400" />
-              </button>
-            </>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- PLATFORM MODAL ---------------- */
-
-function PlatformModal({
-  platform,
-  handle,
-  stats,
-  onClose,
-  onCopy,
-  onOpen,
-}: {
-  platform: PlatformKey;
-  handle: string;
-  stats: any | null;
-  onClose: () => void;
-  onCopy: (handle: string) => void;
-  onOpen: () => void;
-}) {
-  const meta = PLATFORM_META[platform];
-
-  const solved =
-    stats?.totalSolved ?? stats?.problemsSolved ?? stats?.problemsSolvedTotal ?? stats?.solved ?? null;
-
-  const rating =
-    stats?.rating ?? stats?.contestRating ?? stats?.currentRating ?? stats?.maxRating ?? null;
-
-  const contests =
-    stats?.contestsParticipated ?? stats?.contests ?? stats?.contestCount ?? null;
-
-  return (
-    <motion.div
-      className="fixed inset-0 z-[70] flex items-center justify-center px-4"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, y: 18, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 14, scale: 0.98 }}
-        transition={{ duration: 0.22, ease: "easeOut" }}
-        className="relative w-full max-w-lg rounded-[28px] border border-slate-800 bg-[#050712]/92 shadow-[0_40px_140px_rgba(0,0,0,0.85)] overflow-hidden"
-      >
-        <div className={`h-14 bg-gradient-to-r ${meta.glow} opacity-90`} />
-        <div className="p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className={`${meta.colorClass} text-xl shrink-0`}>{meta.icon}</span>
-                <p className="text-lg font-semibold text-slate-50 truncate">{meta.label}</p>
-              </div>
-              <p className="mt-1 text-xs text-slate-400 truncate">{handle ? `@${handle}` : "not linked"}</p>
-            </div>
-
-            <button
-              onClick={onClose}
-              className="h-10 w-10 rounded-2xl border border-slate-800 bg-slate-950/40 flex items-center justify-center hover:border-sky-400/60 transition"
-            >
-              <RiCloseLine className="text-slate-400" />
-            </button>
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <MiniStatBox label="Solved" value={solved} />
-            <MiniStatBox label="Rating" value={rating} />
-            <MiniStatBox label="Contests" value={contests} />
-          </div>
-
-          <div className="mt-4 rounded-3xl border border-slate-800 bg-slate-950/35 p-4">
-            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-slate-500">Actions</p>
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={() => onCopy(handle)}
-                disabled={!handle}
-                className={`flex-1 inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs transition ${
-                  handle
-                    ? "border-slate-800 bg-[#050712] text-slate-200 hover:border-sky-400"
-                    : "border-slate-900 bg-slate-950/20 text-slate-600 cursor-not-allowed"
-                }`}
-              >
-                <RiFileCopyLine className="text-slate-500" />
-                Copy handle
-              </button>
-              <button
-                onClick={onOpen}
-                disabled={!handle}
-                className={`flex-1 inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs transition ${
-                  handle
-                    ? "border-slate-800 bg-[#050712] text-slate-200 hover:border-sky-400"
-                    : "border-slate-900 bg-slate-950/20 text-slate-600 cursor-not-allowed"
-                }`}
-              >
-                <RiExternalLinkLine className="text-slate-500" />
-                Open profile
-              </button>
-            </div>
-          </div>
-
-          {!stats && (
-            <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
-              <p className="text-xs text-slate-500">No scraped stats found yet. Refresh may be pending.</p>
-            </div>
-          )}
-        </div>
-      </motion.div>
-    </motion.div>
   );
 }
