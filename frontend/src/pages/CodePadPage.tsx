@@ -1,5 +1,5 @@
 // src/pages/CodePadPage.tsx
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 import {
   RiCodeLine,
@@ -9,6 +9,10 @@ import {
   RiRobot2Line,
   RiCloseLine,
 } from "react-icons/ri";
+
+/* ----------------- ✅ API BASE (NO LOCALHOST HARDCODE) ----------------- */
+const API_BASE =
+  (import.meta.env.VITE_API_URL || "").trim() || "http://localhost:5000";
 
 /* ----------------- TYPES & DATA ----------------- */
 
@@ -122,19 +126,15 @@ function parseAdviceSegments(text: string): Segment[] {
   while ((match = regex.exec(text)) !== null) {
     const matchIndex = match.index;
 
-    // text before this code block
     if (matchIndex > lastIndex) {
       const before = text.slice(lastIndex, matchIndex);
-      if (before.trim()) {
-        segments.push({ type: "text", content: before.trim() });
-      }
+      if (before.trim()) segments.push({ type: "text", content: before.trim() });
     }
 
     const inside = match[1] ?? "";
     let language: string | undefined;
     let code = inside;
 
-    // detect "```lang\ncode..."
     const firstNewline = inside.indexOf("\n");
     if (firstNewline !== -1) {
       const firstLine = inside.slice(0, firstNewline).trim();
@@ -145,26 +145,16 @@ function parseAdviceSegments(text: string): Segment[] {
       }
     }
 
-    segments.push({
-      type: "code",
-      content: code.trimEnd(),
-      language,
-    });
-
+    segments.push({ type: "code", content: code.trimEnd(), language });
     lastIndex = regex.lastIndex;
   }
 
-  // text after last block
   if (lastIndex < text.length) {
     const tail = text.slice(lastIndex);
-    if (tail.trim()) {
-      segments.push({ type: "text", content: tail.trim() });
-    }
+    if (tail.trim()) segments.push({ type: "text", content: tail.trim() });
   }
 
-  if (segments.length === 0) {
-    segments.push({ type: "text", content: text });
-  }
+  if (segments.length === 0) segments.push({ type: "text", content: text });
 
   return segments;
 }
@@ -183,9 +173,7 @@ const CodeBlock: React.FC<{
       await navigator.clipboard.writeText(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 1300);
-    } catch {
-      // ignore
-    }
+    } catch {}
   };
 
   const lines = code.split("\n");
@@ -223,13 +211,11 @@ const CodeBlock: React.FC<{
 
       <div className="max-h-64 overflow-auto text-xs sm:text-[13px] font-mono bg-transparent">
         <pre className="flex px-3 py-3">
-          {/* line numbers */}
           <div className="pr-3 mr-3 border-r border-slate-800 text-[10px] text-slate-500 select-none">
             {lines.map((_, idx) => (
               <div key={idx}>{idx + 1}</div>
             ))}
           </div>
-          {/* code (syntax-highlight-ready via language- class) */}
           <code className={langClass}>
             {lines.map((line, idx) => (
               <div key={idx}>{line || " "}</div>
@@ -251,19 +237,16 @@ const CodePadPage: React.FC = () => {
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // CodeSense AI state
   const [aiAdvice, setAiAdvice] = useState<string>("");
   const [aiError, setAiError] = useState<string>("");
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
 
-  // Floating panel controls
   const [showAiPanel, setShowAiPanel] = useState<boolean>(false);
   const [aiPanelVisible, setAiPanelVisible] = useState<boolean>(false);
   const [aiPanelSide, setAiPanelSide] = useState<"right" | "left">("right");
-  const [aiPanelHeight, setAiPanelHeight] = useState<number>(320);
+  const [aiPanelHeight, setAiPanelHeight] = useState<number>(360); // slightly taller
   const [isResizing, setIsResizing] = useState<boolean>(false);
 
-  // History of CodeSense AI responses
   const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>([]);
   const [activeHistoryIndex, setActiveHistoryIndex] = useState<number | null>(
     null
@@ -287,7 +270,7 @@ const CodePadPage: React.FC = () => {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/execute", {
+      const response = await fetch(`${API_BASE}/api/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -303,39 +286,28 @@ const CodePadPage: React.FC = () => {
         try {
           const errData = await response.json();
           if (errData?.error) errMessage = errData.error;
-        } catch {
-          // ignore
-        }
+        } catch {}
         throw new Error(errMessage);
       }
 
       const result: PistonResponse = await response.json();
-      let finalOut = "";
 
       if (result.compile?.stderr) {
-        finalOut += `[Compile Error]:\n${result.compile.stderr}`;
-        setError(finalOut);
+        setError(`[Compile Error]:\n${result.compile.stderr}`);
       } else if (result.run?.stderr) {
-        finalOut += `[Runtime Error]:\n${result.run.stderr}`;
-        setError(finalOut);
+        setError(`[Runtime Error]:\n${result.run.stderr}`);
       } else if (result.run?.stdout !== undefined) {
-        finalOut = result.run.stdout;
-        setOutput(finalOut);
+        setOutput(result.run.stdout);
       } else {
         setOutput("Execution finished with no output.");
       }
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Unknown error occurred.");
-      }
+      setError(err instanceof Error ? err.message : "Unknown error occurred.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // CodeSense AI
   const handleAskAI = async () => {
     setShowAiPanel(true);
     setTimeout(() => setAiPanelVisible(true), 10);
@@ -345,7 +317,7 @@ const CodePadPage: React.FC = () => {
     setAiAdvice("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/ai-helper", {
+      const response = await fetch(`${API_BASE}/api/ai-helper`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -364,9 +336,7 @@ const CodePadPage: React.FC = () => {
           const errData = await response.json();
           if (errData?.error) errMessage = errData.error;
           if (errData?.details) errMessage += ` (${errData.details})`;
-        } catch {
-          // ignore
-        }
+        } catch {}
         throw new Error(errMessage);
       }
 
@@ -391,11 +361,7 @@ const CodePadPage: React.FC = () => {
         return next;
       });
     } catch (err) {
-      if (err instanceof Error) {
-        setAiError(err.message);
-      } else {
-        setAiError("Something went wrong while asking CodeSense AI.");
-      }
+      setAiError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setIsAiLoading(false);
     }
@@ -419,9 +385,7 @@ const CodePadPage: React.FC = () => {
 
   const handleCloseAiPanel = () => {
     setAiPanelVisible(false);
-    setTimeout(() => {
-      setShowAiPanel(false);
-    }, 220);
+    setTimeout(() => setShowAiPanel(false), 220);
   };
 
   const handleToggleSide = () =>
@@ -440,15 +404,13 @@ const CodePadPage: React.FC = () => {
     const handleMouseMove = (e: MouseEvent) => {
       const bottomOffset = 16;
       const newHeight = Math.min(
-        480,
-        Math.max(220, window.innerHeight - e.clientY - bottomOffset)
+        560,
+        Math.max(240, window.innerHeight - e.clientY - bottomOffset)
       );
       setAiPanelHeight(newHeight);
     };
 
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
+    const handleMouseUp = () => setIsResizing(false);
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
@@ -470,16 +432,15 @@ const CodePadPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-[#050509] text-slate-100 font-display overflow-x-hidden">
-      {/* Background glow blobs */}
       <div className="pointer-events-none fixed inset-0 opacity-40">
         <div className="absolute -top-24 -left-10 h-64 w-64 rounded-full bg-sky-500 blur-3xl" />
         <div className="absolute bottom-[-4rem] right-[-2rem] h-72 w-72 rounded-full bg-fuchsia-500 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-6 pt-20 pb-10 sm:px-10 lg:px-16 xl:px-24">
-        {/* Header */}
+      {/* ✅ WIDER CONTAINER */}
+      <div className="relative mx-auto max-w-[92rem] px-4 sm:px-8 lg:px-12 xl:px-16 pt-20 pb-10">
         <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-4 max-w-2xl">
+          <div className="space-y-4 max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-black/80 px-4 py-1 text-[11px] text-slate-300 whitespace-nowrap">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               CodeSync · CodePad & Live Execution
@@ -520,8 +481,7 @@ const CodePadPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Tips card */}
-          <div className="mt-4 md:mt-0 md:w-72">
+          <div className="mt-4 md:mt-0 md:w-80">
             <div className="rounded-2xl border border-slate-800 bg-black/90 p-4 shadow-[0_0_25px_rgba(15,23,42,0.8)]">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-2 whitespace-nowrap">
                 Quick tips
@@ -543,24 +503,24 @@ const CodePadPage: React.FC = () => {
                   </span>
                 </li>
               </ul>
+              <p className="mt-3 text-[10px] text-slate-500">
+                API: <span className="text-slate-300">{API_BASE}</span>
+              </p>
             </div>
           </div>
         </header>
 
-        {/* Main layout */}
-        <main className="grid h-[720px] grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Editor panel */}
-          <section className="relative col-span-1 flex flex-col rounded-3xl border border-slate-800 bg-black/90 shadow-[0_0_35px_rgba(15,23,42,0.9)] backdrop-blur-xl lg:col-span-2">
+        {/* ✅ TALLER MAIN AREA + EDITOR GETS MORE SPACE */}
+        <main className="grid h-[780px] grid-cols-1 gap-6 xl:grid-cols-4">
+          <section className="relative col-span-1 flex flex-col rounded-3xl border border-slate-800 bg-black/90 shadow-[0_0_35px_rgba(15,23,42,0.9)] backdrop-blur-xl xl:col-span-3">
             <div className="h-[2px] w-full bg-gradient-to-r from-sky-500 via-fuchsia-500 to-emerald-400 opacity-70" />
 
-            {/* Toolbar — flex-wrap so it can break cleanly */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-              {/* Left: icon + title */}
               <div className="flex items-center gap-2 min-w-[180px]">
                 <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#050710] border border-slate-700 text-sky-300 text-lg">
                   <RiCodeLine />
                 </div>
-                <div className="max-w-[180px]">
+                <div className="max-w-[220px]">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
                     Editor
                   </p>
@@ -570,14 +530,12 @@ const CodePadPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right: language + buttons (wraps neatly on 2 rows if needed) */}
               <div className="flex flex-wrap items-center justify-end gap-2 flex-1">
-                {/* Language + version */}
                 <div className="hidden sm:flex items-center gap-2">
                   <select
                     value={language.value}
                     onChange={handleLanguageChange}
-                    className="w-32 rounded-md border border-slate-700 bg-[#050710] px-3 py-1 text-xs text-slate-100 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                    className="w-40 rounded-md border border-slate-700 bg-[#050710] px-3 py-1 text-xs text-slate-100 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
                   >
                     {LANGUAGES.map((lang) => (
                       <option key={lang.value} value={lang.value}>
@@ -590,7 +548,6 @@ const CodePadPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* CodeSense + Reset + Run */}
                 <button
                   onClick={handleAskAI}
                   disabled={isAiLoading}
@@ -636,12 +593,9 @@ const CodePadPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Mobile language selector */}
             <div className="flex sm:hidden items-center justify-between border-b border-slate-800 px-4 py-2 text-[11px] text-slate-300">
               <div className="flex items-center gap-2">
-                <span className="text-slate-400 whitespace-nowrap">
-                  Language:
-                </span>
+                <span className="text-slate-400 whitespace-nowrap">Language:</span>
                 <select
                   value={language.value}
                   onChange={handleLanguageChange}
@@ -659,7 +613,6 @@ const CodePadPage: React.FC = () => {
               </span>
             </div>
 
-            {/* Editor */}
             <div className="relative flex-1 overflow-hidden pt-1">
               <Editor
                 height="100%"
@@ -698,7 +651,6 @@ const CodePadPage: React.FC = () => {
               />
             </div>
 
-            {/* Bottom hint */}
             <div className="border-t border-slate-800 px-4 py-2 text-[11px] text-slate-500 flex items-center justify-between gap-2">
               <span className="whitespace-nowrap">
                 Tip: Use the input panel on the right for stdin.
@@ -712,9 +664,8 @@ const CodePadPage: React.FC = () => {
             </div>
           </section>
 
-          {/* IO side panel */}
-          <section className="flex flex-col gap-5">
-            {/* Input */}
+          {/* ✅ Wider IO panel column on xl */}
+          <section className="flex flex-col gap-5 xl:col-span-1">
             <div className="flex flex-1 flex-col overflow-hidden rounded-3xl border border-slate-800 bg-black/90 shadow-[0_0_28px_rgba(15,23,42,0.9)] backdrop-blur-xl">
               <div className="h-[2px] w-full bg-gradient-to-r from-sky-500 via-cyan-400 to-transparent opacity-70" />
 
@@ -745,7 +696,6 @@ const CodePadPage: React.FC = () => {
               />
             </div>
 
-            {/* Output */}
             <div className="flex flex-1 flex-col overflow-hidden rounded-3xl border border-slate-800 bg-black/90 shadow-[0_0_28px_rgba(15,23,42,0.9)] backdrop-blur-xl">
               <div className="h-[2px] w-full bg-gradient-to-r from-emerald-400 via-sky-400 to-transparent opacity-70" />
 
@@ -789,10 +739,11 @@ const CodePadPage: React.FC = () => {
               onClick={handleCloseAiPanel}
             />
 
+            {/* ✅ wider AI panel (max-w-xl) */}
             <div
               className={`fixed bottom-4 ${
                 aiPanelSide === "right" ? "right-4" : "left-4"
-              } z-40 w-full max-w-md px-4 sm:px-0 transition-all duration-300 ease-out transform ${
+              } z-40 w-full max-w-xl px-4 sm:px-0 transition-all duration-300 ease-out transform ${
                 aiPanelVisible
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
@@ -863,39 +814,33 @@ const CodePadPage: React.FC = () => {
                   )}
 
                   {!isAiLoading && aiError && (
-                    <p className="text-red-400 whitespace-pre-wrap">
-                      {aiError}
-                    </p>
+                    <p className="text-red-400 whitespace-pre-wrap">{aiError}</p>
                   )}
 
                   {!isAiLoading && !aiError && activeEntry && (
                     <div className="space-y-2">
-                      {parseAdviceSegments(activeEntry.content).map(
-                        (seg, idx) =>
-                          seg.type === "text" ? (
-                            <p
-                              key={idx}
-                              className="whitespace-pre-wrap text-slate-100"
-                            >
-                              {seg.content}
-                            </p>
-                          ) : (
-                            <CodeBlock
-                              key={idx}
-                              code={seg.content}
-                              language={seg.language}
-                              onApply={() => setCode(seg.content)}
-                            />
-                          )
+                      {parseAdviceSegments(activeEntry.content).map((seg, idx) =>
+                        seg.type === "text" ? (
+                          <p key={idx} className="whitespace-pre-wrap text-slate-100">
+                            {seg.content}
+                          </p>
+                        ) : (
+                          <CodeBlock
+                            key={idx}
+                            code={seg.content}
+                            language={seg.language}
+                            onApply={() => setCode(seg.content)}
+                          />
+                        )
                       )}
                     </div>
                   )}
 
                   {!isAiLoading && !aiError && !activeEntry && (
                     <p className="text-slate-400">
-                      CodeSense AI will analyse your current code, input,
-                      output and errors, then suggest fixes, a better approach
-                      and time/space complexity.
+                      CodeSense AI will analyse your current code, input, output and
+                      errors, then suggest fixes, a better approach and time/space
+                      complexity.
                     </p>
                   )}
                 </div>
