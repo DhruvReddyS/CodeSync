@@ -44,12 +44,20 @@ type Engine = {
   format?: {
     issues?: string[];
     wins?: string[];
-    stats?: { bulletsCount?: number; metricsCount?: number; actionVerbSignals?: number };
+    stats?: {
+      bulletsCount?: number;
+      metricsCount?: number;
+      actionVerbSignals?: number;
+    };
   };
 
   overallScore?: number;
   categoryScores?: Record<string, number>;
-  keywordInsights?: { present?: string[]; missing?: string[]; criticalMissing?: string[] };
+  keywordInsights?: {
+    present?: string[];
+    missing?: string[];
+    criticalMissing?: string[];
+  };
   formatFindings?: { issues?: string[]; wins?: string[] };
 };
 
@@ -76,7 +84,11 @@ type ApiResponse = {
 
   warning?: string | null;
   gemini?: { lastStatus?: number | null; lastError?: string | null } | null;
-  keyStatus?: Array<{ blocked: boolean; cooling: boolean; lastStatus: number | null }>;
+  keyStatus?: Array<{
+    blocked: boolean;
+    cooling: boolean;
+    lastStatus: number | null;
+  }>;
 
   error?: string;
   details?: string;
@@ -112,6 +124,22 @@ function getUid(req: AuthedUidRequest): string | null {
   return typeof uid === "string" && uid.trim() ? uid : null;
 }
 
+/* ------------------------------ ✅ Job Suggestions Types ------------------------------ */
+
+type JobSuggestion = {
+  title: string;
+  level: string;
+  summary: string;
+  idealCompanies: string[];
+  keySkills: string[];
+};
+
+type JobSuggestBody = {
+  currentProfile?: string;
+  interests?: string;
+  locationPref?: string;
+};
+
 /* ------------------------------ Key state ------------------------------ */
 
 const keyStates: KeyState[] = GEMINI_KEYS.map((k) => ({
@@ -143,6 +171,14 @@ function pickKey(): KeyState | null {
 const atsLimiter = rateLimit({ windowMs: 60 * 1000, max: 8 });
 
 const resumeAiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// ✅ Job Suggestions limiter
+const jobSuggestLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
   standardHeaders: true,
@@ -200,21 +236,86 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * ========================================================= */
 
 const HARD_SKILL_HINTS = [
-  "kubernetes","docker","terraform","ansible","aws","gcp","azure","linux","git","github","gitlab","jenkins",
-  "cicd","ci/cd","microservices","rest","api","sql","mongodb","redis","python","java","javascript","node",
-  "express","react","typescript","postgres","mysql","prometheus","grafana","splunk","elk","nginx","kafka",
-  "spark","ml","ai","genai","llm",
+  "kubernetes",
+  "docker",
+  "terraform",
+  "ansible",
+  "aws",
+  "gcp",
+  "azure",
+  "linux",
+  "git",
+  "github",
+  "gitlab",
+  "jenkins",
+  "cicd",
+  "ci/cd",
+  "microservices",
+  "rest",
+  "api",
+  "sql",
+  "mongodb",
+  "redis",
+  "python",
+  "java",
+  "javascript",
+  "node",
+  "express",
+  "react",
+  "typescript",
+  "postgres",
+  "mysql",
+  "prometheus",
+  "grafana",
+  "splunk",
+  "elk",
+  "nginx",
+  "kafka",
+  "spark",
+  "ml",
+  "ai",
+  "genai",
+  "llm",
 ];
 
 const SOFT_SKILL_HINTS = [
-  "communication","collaboration","teamwork","leadership","ownership","problem solving","stakeholder",
-  "agile","scrum","kanban","prioritize","initiative","mentoring",
+  "communication",
+  "collaboration",
+  "teamwork",
+  "leadership",
+  "ownership",
+  "problem solving",
+  "stakeholder",
+  "agile",
+  "scrum",
+  "kanban",
+  "prioritize",
+  "initiative",
+  "mentoring",
 ];
 
 const ACTION_VERBS = [
-  "built","developed","designed","implemented","delivered","optimized","improved","automated","migrated",
-  "deployed","led","owned","created","integrated","reduced","increased","enhanced","monitored","debugged",
-  "shipped","architected",
+  "built",
+  "developed",
+  "designed",
+  "implemented",
+  "delivered",
+  "optimized",
+  "improved",
+  "automated",
+  "migrated",
+  "deployed",
+  "led",
+  "owned",
+  "created",
+  "integrated",
+  "reduced",
+  "increased",
+  "enhanced",
+  "monitored",
+  "debugged",
+  "shipped",
+  "architected",
 ];
 
 function normalize(s: string) {
@@ -254,12 +355,49 @@ function extractKeywordsFromJD(jobDescription: string) {
   const combined = uniq([...hard, ...soft, ...techish]);
 
   const stop = new Set([
-    "and","or","the","with","for","to","in","of","a","an","on","as","is","are","be","you","we","our","your",
-    "this","that","will","should","must","experience","knowledge","skills","ability","understanding","years",
-    "year","role","responsibilities","requirements","preferred","strong","good",
+    "and",
+    "or",
+    "the",
+    "with",
+    "for",
+    "to",
+    "in",
+    "of",
+    "a",
+    "an",
+    "on",
+    "as",
+    "is",
+    "are",
+    "be",
+    "you",
+    "we",
+    "our",
+    "your",
+    "this",
+    "that",
+    "will",
+    "should",
+    "must",
+    "experience",
+    "knowledge",
+    "skills",
+    "ability",
+    "understanding",
+    "years",
+    "year",
+    "role",
+    "responsibilities",
+    "requirements",
+    "preferred",
+    "strong",
+    "good",
   ]);
 
-  return uniq(combined.map(normalize).filter((x) => x && !stop.has(x))).slice(0, 280);
+  return uniq(combined.map(normalize).filter((x) => x && !stop.has(x))).slice(
+    0,
+    280
+  );
 }
 
 function detectCoreHeadings(resume: string) {
@@ -326,7 +464,9 @@ function computeATSScore(resumeTextRaw: string, jobDescRaw: string): RawEngine {
     resumeTextRaw,
     /\b(\d+%|\d+\s?(x|X)|\d+\s?(k|K|m|M)|₹\s?\d+|\$\s?\d+)\b/g
   );
-  const actionVerbSignals = ACTION_VERBS.filter((v) => resumeText.includes(v)).length;
+  const actionVerbSignals = ACTION_VERBS.filter((v) =>
+    resumeText.includes(v)
+  ).length;
 
   const impactScore = clamp0_100(
     (Math.min(metricsCount, 10) / 10) * 55 +
@@ -441,10 +581,14 @@ function mapToFrontendEngine(raw: RawEngine): Engine {
     experienceAlignment: raw.hardSkillScore,
     impactMetrics: raw.impactScore,
     readability: clamp0_100(
-      55 + Math.min(raw.format.stats.bulletsCount, 20) * 2 + Math.min(raw.format.stats.actionVerbSignals, 12) * 2
+      55 +
+        Math.min(raw.format.stats.bulletsCount, 20) * 2 +
+        Math.min(raw.format.stats.actionVerbSignals, 12) * 2
     ),
     structure: clamp0_100(
-      60 + Math.min(raw.format.stats.bulletsCount, 18) * 2 + Math.min(raw.format.stats.metricsCount, 10) * 2
+      60 +
+        Math.min(raw.format.stats.bulletsCount, 18) * 2 +
+        Math.min(raw.format.stats.metricsCount, 10) * 2
     ),
   };
 
@@ -488,7 +632,8 @@ function safeExtractJson(text: string) {
   if (m?.[1]) return m[1].trim();
   const first = text.indexOf("{");
   const last = text.lastIndexOf("}");
-  if (first !== -1 && last !== -1 && last > first) return text.slice(first, last + 1).trim();
+  if (first !== -1 && last !== -1 && last > first)
+    return text.slice(first, last + 1).trim();
   return null;
 }
 
@@ -566,13 +711,48 @@ async function callGeminiWithBackoff(prompt: string) {
 async function geminiJsonStrict(prompt: string) {
   const g = await callGeminiWithBackoff(prompt);
   if (!g.ok) {
-    const msg = `Gemini failed: ${g.lastError || "Unknown"}${g.lastStatus ? ` (HTTP ${g.lastStatus})` : ""}`;
+    const msg = `Gemini failed: ${g.lastError || "Unknown"}${
+      g.lastStatus ? ` (HTTP ${g.lastStatus})` : ""
+    }`;
     throw new Error(msg);
   }
   const jsonStr = safeExtractJson(g.text) ?? g.text;
   const parsed = safeJsonParse<any>(jsonStr);
   if (!parsed) throw new Error("AI returned non-JSON output unexpectedly");
   return parsed;
+}
+
+/* ------------------------------ ✅ Job Suggestions normalize helper ------------------------------ */
+
+function normalizeJobSuggestions(input: any): JobSuggestion[] {
+  const arr = Array.isArray(input?.jobs)
+    ? input.jobs
+    : Array.isArray(input)
+    ? input
+    : [];
+  if (!Array.isArray(arr)) return [];
+
+  const cleaned: JobSuggestion[] = arr
+    .map((j: any) => ({
+      title: String(j?.title ?? "").trim(),
+      level: String(j?.level ?? "").trim(),
+      summary: String(j?.summary ?? "").trim(),
+      idealCompanies: Array.isArray(j?.idealCompanies)
+        ? j.idealCompanies.map((x: any) => String(x).trim()).filter(Boolean)
+        : [],
+      keySkills: Array.isArray(j?.keySkills)
+        ? j.keySkills.map((x: any) => String(x).trim()).filter(Boolean)
+        : [],
+    }))
+    .filter((j) => j.title && j.level && j.summary)
+    .slice(0, 10)
+    .map((j) => ({
+      ...j,
+      idealCompanies: j.idealCompanies.slice(0, 8),
+      keySkills: j.keySkills.slice(0, 18),
+    }));
+
+  return cleaned;
 }
 
 /* =========================================================
@@ -624,7 +804,9 @@ Missing keywords to focus: ${(
     engine.keywordInsights?.missing ||
     engine.keywords?.missingTop ||
     []
-  ).slice(0, 25).join(", ")}
+  )
+    .slice(0, 25)
+    .join(", ")}
 
 Resume:
 ${resumeText}
@@ -647,7 +829,9 @@ router.post(
       };
 
       if (!jobDescription?.trim() || !resumeText?.trim()) {
-        return res.status(400).json({ error: "jobDescription and resumeText are required." });
+        return res
+          .status(400)
+          .json({ error: "jobDescription and resumeText are required." });
       }
 
       const raw = computeATSScore(
@@ -689,7 +873,9 @@ router.post(
             changesMade: String(parsed.changesMade || ""),
             about: String(parsed.about || ""),
             improve: String(parsed.improve || ""),
-            percent: String(parsed.percent || `${engine.overallScore ?? engine.matchPercent ?? 0}%`),
+            percent: String(
+              parsed.percent || `${engine.overallScore ?? engine.matchPercent ?? 0}%`
+            ),
           };
 
           return res.json({
@@ -716,7 +902,9 @@ router.post(
       return res.json({
         engine,
         sections: null,
-        warning: `AI partial mode: ${g.lastError || "Unknown error"}${g.lastStatus ? ` (HTTP ${g.lastStatus})` : ""}`,
+        warning: `AI partial mode: ${g.lastError || "Unknown error"}${
+          g.lastStatus ? ` (HTTP ${g.lastStatus})` : ""
+        }`,
         gemini: { lastStatus: g.lastStatus, lastError: g.lastError },
       });
     } catch (err: any) {
@@ -726,6 +914,114 @@ router.post(
         details: err?.message || "Unknown error",
         lastError: err?.message || "Unknown error",
         lastStatus: 500,
+      });
+    }
+  }
+);
+
+/* =========================================================
+ * ✅ Job Suggestions (NEW)
+ * =========================================================
+ *
+ * POST /api/career/job-suggestions
+ * body: { currentProfile, interests, locationPref }
+ * returns: { ok: true, jobs: JobSuggestion[] }
+ */
+
+router.post(
+  "/job-suggestions",
+  jobSuggestLimiter,
+  authMiddleware,
+  requireStudent,
+  express.json({ limit: "2mb" }),
+  async (req: Request, res: Response) => {
+    try {
+      const body = (req.body || {}) as JobSuggestBody;
+
+      const currentProfile = String(body.currentProfile || "").trim();
+      const interests = String(body.interests || "").trim();
+      const locationPref = String(body.locationPref || "").trim();
+
+      if (!currentProfile && !interests) {
+        return res.status(400).json({
+          ok: false,
+          message: "Provide at least currentProfile or interests",
+        });
+      }
+
+      // Optional tiny personalization from student doc (no new APIs)
+      let studentContext = "";
+      const uid = getUid(req as AuthedUidRequest);
+      if (uid) {
+        const snap = await firestore.collection("students").doc(uid).get();
+        const st = snap.data() || {};
+        const name = st.fullname || st.name || "";
+        const branch = st.branch || "";
+        const year = st.year || "";
+        studentContext = `
+STUDENT_META:
+name: ${name || "(unknown)"}
+branch: ${branch || "(unknown)"}
+year: ${year || "(unknown)"}
+`.trim();
+      }
+
+      const prompt = `
+Return ONLY valid JSON. No markdown. No backticks. No extra text.
+
+You are an expert career advisor for computer science students.
+Your output MUST match this schema exactly:
+
+{
+  "jobs": [
+    {
+      "title": "string",
+      "level": "string (Intern / Entry / New Grad / Junior / Mid)",
+      "summary": "string (2-3 lines, specific and actionable)",
+      "idealCompanies": ["string", "..."],
+      "keySkills": ["string", "..."]
+    }
+  ]
+}
+
+Rules:
+- Generate 5 to 7 roles.
+- Titles must be realistic common roles on job portals.
+- Avoid repeating near-identical roles.
+- keySkills: 8 to 14 items each (mix of tech + concepts).
+- idealCompanies: 3 to 6 companies (mix big + startups relevant).
+- If the user sounds like a student, include internships/new-grad roles.
+- Keep summaries crisp; no generic filler.
+
+${studentContext}
+
+USER_CURRENT_PROFILE:
+${currentProfile || "(not provided)"}
+
+USER_INTERESTS:
+${interests || "(not provided)"}
+
+LOCATION_PREFERENCE:
+${locationPref || "(not provided)"}
+      `.trim();
+
+      const parsed = await geminiJsonStrict(prompt);
+      const jobs = normalizeJobSuggestions(parsed);
+
+      return res.json({
+        ok: true,
+        jobs,
+        keyStatus: keyStates.map((k) => ({
+          blocked: !!k.blockedForever,
+          cooling: !!(k.cooldownUntil && k.cooldownUntil > now()),
+          lastStatus: k.lastStatus,
+        })),
+      });
+    } catch (e: any) {
+      console.error("[job-suggestions] error:", e);
+      return res.status(500).json({
+        ok: false,
+        message: e?.message || "Job suggestions failed",
       });
     }
   }
@@ -745,9 +1041,19 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const uid = getUid(req as AuthedUidRequest);
-      if (!uid) return res.status(401).json({ ok: false, message: "Unauthorized (uid missing)" });
+      if (!uid)
+        return res
+          .status(401)
+          .json({ ok: false, message: "Unauthorized (uid missing)" });
 
-      const platforms = ["leetcode", "codechef", "codeforces", "hackerrank", "github", "atcoder"];
+      const platforms = [
+        "leetcode",
+        "codechef",
+        "codeforces",
+        "hackerrank",
+        "github",
+        "atcoder",
+      ];
       const badges: Array<{ label: string; level: string; meta?: string }> = [];
       const suggestedConcepts = new Set<string>();
       const suggestedTools = new Set<string>();
@@ -763,43 +1069,68 @@ router.get(
         const stats = snap.data() || {};
 
         if (p === "leetcode") {
-          const solved = Number(stats.totalSolved || stats.problemsSolvedTotal || stats.problemsSolved || 0);
-          if (solved >= 500) badges.push({ label: "LeetCode 500+", level: "platinum", meta: `${solved}` });
-          else if (solved >= 300) badges.push({ label: "LeetCode 300+", level: "gold", meta: `${solved}` });
-          else if (solved >= 150) badges.push({ label: "LeetCode 150+", level: "silver", meta: `${solved}` });
+          const solved = Number(
+            stats.totalSolved ||
+              stats.problemsSolvedTotal ||
+              stats.problemsSolved ||
+              0
+          );
+          if (solved >= 500)
+            badges.push({ label: "LeetCode 500+", level: "platinum", meta: `${solved}` });
+          else if (solved >= 300)
+            badges.push({ label: "LeetCode 300+", level: "gold", meta: `${solved}` });
+          else if (solved >= 150)
+            badges.push({ label: "LeetCode 150+", level: "silver", meta: `${solved}` });
           suggestedConcepts.add("Problem Solving");
           suggestedConcepts.add("DSA");
         }
 
         if (p === "codeforces") {
-          const maxRating = Number(stats.maxRating || stats.currentRating || stats.rating || 0);
-          if (maxRating >= 1800) badges.push({ label: "Codeforces Expert+", level: "platinum", meta: `${maxRating}` });
-          else if (maxRating >= 1400) badges.push({ label: "Codeforces Specialist+", level: "gold", meta: `${maxRating}` });
-          else if (maxRating >= 1200) badges.push({ label: "Codeforces 1200+", level: "silver", meta: `${maxRating}` });
+          const maxRating = Number(
+            stats.maxRating || stats.currentRating || stats.rating || 0
+          );
+          if (maxRating >= 1800)
+            badges.push({ label: "Codeforces Expert+", level: "platinum", meta: `${maxRating}` });
+          else if (maxRating >= 1400)
+            badges.push({ label: "Codeforces Specialist+", level: "gold", meta: `${maxRating}` });
+          else if (maxRating >= 1200)
+            badges.push({ label: "Codeforces 1200+", level: "silver", meta: `${maxRating}` });
           suggestedConcepts.add("Competitive Programming");
           suggestedConcepts.add("Algorithms");
         }
 
         if (p === "codechef") {
-          const maxRating = Number(stats.maxRating || stats.currentRating || stats.rating || 0);
-          if (maxRating >= 2000) badges.push({ label: "CodeChef 2000+", level: "platinum", meta: `${maxRating}` });
-          else if (maxRating >= 1600) badges.push({ label: "CodeChef 1600+", level: "gold", meta: `${maxRating}` });
-          else if (maxRating >= 1400) badges.push({ label: "CodeChef 1400+", level: "silver", meta: `${maxRating}` });
+          const maxRating = Number(
+            stats.maxRating || stats.currentRating || stats.rating || 0
+          );
+          if (maxRating >= 2000)
+            badges.push({ label: "CodeChef 2000+", level: "platinum", meta: `${maxRating}` });
+          else if (maxRating >= 1600)
+            badges.push({ label: "CodeChef 1600+", level: "gold", meta: `${maxRating}` });
+          else if (maxRating >= 1400)
+            badges.push({ label: "CodeChef 1400+", level: "silver", meta: `${maxRating}` });
           suggestedConcepts.add("Competitive Programming");
         }
 
         if (p === "hackerrank") {
-          const badgesCount = Array.isArray(stats.badges) ? stats.badges.length : Number(stats.badgesCount || 0);
-          if (badgesCount >= 10) badges.push({ label: "HackerRank 10+ badges", level: "gold", meta: `${badgesCount}` });
-          else if (badgesCount >= 5) badges.push({ label: "HackerRank 5+ badges", level: "silver", meta: `${badgesCount}` });
+          const badgesCount = Array.isArray(stats.badges)
+            ? stats.badges.length
+            : Number(stats.badgesCount || 0);
+          if (badgesCount >= 10)
+            badges.push({ label: "HackerRank 10+ badges", level: "gold", meta: `${badgesCount}` });
+          else if (badgesCount >= 5)
+            badges.push({ label: "HackerRank 5+ badges", level: "silver", meta: `${badgesCount}` });
           suggestedConcepts.add("Problem Solving");
         }
 
         if (p === "github") {
           const contrib = Number(stats.contributions || stats.totalContributions || 0);
-          if (contrib >= 1000) badges.push({ label: "GitHub 1000+ contribs", level: "platinum", meta: `${contrib}` });
-          else if (contrib >= 500) badges.push({ label: "GitHub 500+ contribs", level: "gold", meta: `${contrib}` });
-          else if (contrib >= 200) badges.push({ label: "GitHub 200+ contribs", level: "silver", meta: `${contrib}` });
+          if (contrib >= 1000)
+            badges.push({ label: "GitHub 1000+ contribs", level: "platinum", meta: `${contrib}` });
+          else if (contrib >= 500)
+            badges.push({ label: "GitHub 500+ contribs", level: "gold", meta: `${contrib}` });
+          else if (contrib >= 200)
+            badges.push({ label: "GitHub 200+ contribs", level: "silver", meta: `${contrib}` });
           suggestedTools.add("Git");
           suggestedTools.add("GitHub");
           suggestedConcepts.add("Open Source");
@@ -807,8 +1138,10 @@ router.get(
 
         if (p === "atcoder") {
           const maxRating = Number(stats.maxRating || stats.rating || 0);
-          if (maxRating >= 1200) badges.push({ label: "AtCoder 1200+", level: "gold", meta: `${maxRating}` });
-          else if (maxRating >= 800) badges.push({ label: "AtCoder 800+", level: "silver", meta: `${maxRating}` });
+          if (maxRating >= 1200)
+            badges.push({ label: "AtCoder 1200+", level: "gold", meta: `${maxRating}` });
+          else if (maxRating >= 800)
+            badges.push({ label: "AtCoder 800+", level: "silver", meta: `${maxRating}` });
           suggestedConcepts.add("Competitive Programming");
         }
       }
@@ -820,7 +1153,9 @@ router.get(
         suggestedTools: Array.from(suggestedTools),
       });
     } catch (e: any) {
-      return res.status(500).json({ ok: false, message: e?.message || "Failed to import badges" });
+      return res
+        .status(500)
+        .json({ ok: false, message: e?.message || "Failed to import badges" });
     }
   }
 );
@@ -883,7 +1218,8 @@ router.post(
     try {
       const { resume, template, targetRole, jobDescription } = req.body || {};
       if (!resume) return res.status(400).json({ ok: false, message: "Missing resume" });
-      if (!jobDescription) return res.status(400).json({ ok: false, message: "Missing jobDescription" });
+      if (!jobDescription)
+        return res.status(400).json({ ok: false, message: "Missing jobDescription" });
 
       const prompt = `
 Return ONLY JSON: {"ok":true,"resume":{...same schema as input...}}.

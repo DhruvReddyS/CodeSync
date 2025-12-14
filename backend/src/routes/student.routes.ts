@@ -17,6 +17,7 @@ const router = express.Router();
 type AuthedReq = AuthedRequest & {
   body: any;
   query: any;
+  params: any;
 };
 
 const STUDENTS_COLLECTION = "students";
@@ -45,11 +46,9 @@ async function loadPlatformStatsMap(
     const data = doc.data() as any;
     const platform = data.platform as PlatformId;
 
-    // We don't restrict keys here: ALL scraped fields are preserved.
+    // Preserve ALL scraped fields.
     if (platform in map) {
-      map[platform] = {
-        ...data,
-      };
+      map[platform] = { ...data };
     }
   });
 
@@ -143,7 +142,7 @@ router.post(
         // Portfolio snapshot
         profile: profile || {},
 
-        onboardingCompleted: true, // 🔥 explicitly mark as completed
+        onboardingCompleted: true,
         updatedAt: FieldValue.serverTimestamp(),
       };
 
@@ -173,7 +172,6 @@ router.post(
           await refreshStudentCPData(studentId);
         } catch (cpErr) {
           console.error("[STUDENT /onboarding] CP refresh failed:", cpErr);
-          // Onboarding shouldn't fail just because scrapers failed
         }
       }
 
@@ -232,8 +230,6 @@ router.patch(
 
 /* ==================================================
  * 📊 Dashboard Stats → GET /api/student/stats/me
- *  - All scraped platform stats (FULL docs from cpProfiles)
- *  - All computed scores (cpScores)
  * ================================================== */
 router.get(
   "/stats/me",
@@ -250,10 +246,9 @@ router.get(
 
       const data = snap.data() || {};
       const cpHandles = data.cpHandles || {};
-      const cpScores = data.cpScores || null; // codeSyncScore, displayScore, platformSkills, totals, etc.
-      const platformStats = await loadPlatformStatsMap(studentId); // 🔥 FULL per-platform scraped data
+      const cpScores = data.cpScores || null;
+      const platformStats = await loadPlatformStatsMap(studentId);
 
-      // This object is what DashboardPage should consume
       return res.json({
         cpHandles,
         cpScores,
@@ -328,10 +323,9 @@ router.post(
     }
   }
 );
+
 /* ==================================================
  * 🏆 Leaderboard → GET /api/student/stats/leaderboard?limit=50
- *  - Scores + basic details for leaderboard page
- *  - cpScores is EXACTLY the same object used by Dashboard (/stats/me)
  * ================================================== */
 router.get(
   "/stats/leaderboard",
@@ -341,8 +335,6 @@ router.get(
       const rawLimit = (req.query?.limit as string) || "50";
       const limit = Number(rawLimit) || 50;
 
-      // 🔹 We assume scoringEngine always writes cpScores.displayScore.
-      // This is the SAME field Dashboard reads & shows.
       const snap = await studentsCol
         .where("cpScores.displayScore", ">", 0)
         .orderBy("cpScores.displayScore", "desc")
@@ -351,28 +343,21 @@ router.get(
 
       const leaderboard = snap.docs.map((doc: any, index: number) => {
         const d = doc.data() || {};
-
-        // 🚨 IMPORTANT:
-        // Do NOT reshape or recompute cpScores here.
-        // Whatever scoringEngine stored in cpScores
-        // (codeSyncScore, displayScore, platformSkills, etc.)
-        // is passed straight through, identical to /stats/me.
         const cpScores = d.cpScores || null;
 
         return {
           studentId: doc.id,
           rank: index + 1,
 
-          // Basic identity
           name: d.fullName || d.fullname || d.name || null,
           branch: d.branch || null,
           section: d.section || null,
           year: d.yearOfStudy || d.year || null,
 
-          // ✅ SAME cpScores object Dashboard gets
-          cpScores,
+          rollNumber: d.rollNumber || null,
+          avatarUrl: d.profile?.avatarUrl || d.avatarUrl || null,
 
-          // CP handles per platform
+          cpScores,
           cpHandles: d.cpHandles || {},
         };
       });
@@ -388,7 +373,61 @@ router.get(
 );
 
 /* ==================================================
- * FULL PROFILE → GET /api/student/profile
+ * 👁️ VIEW ANY STUDENT PROFILE (by id)
+ * GET /api/student/profile/:id
+ *  - Used when clicking a leaderboard row
+ *  - Safe fields + cpScores + platformStats (cpProfiles)
+ * ================================================== */
+router.get(
+  "/profile/:id",
+  authMiddleware,
+  requireStudent,
+  async (req: AuthedReq, res: Response) => {
+    try {
+      const targetId = String(req.params?.id || "").trim();
+      if (!targetId) {
+        return res.status(400).json({ message: "Student id is required" });
+      }
+
+      const snap = await studentsCol.doc(targetId).get();
+      if (!snap.exists) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      const data = snap.data() || {};
+
+      const cpScores = data.cpScores || null;
+      const platformStats = await loadPlatformStatsMap(targetId);
+
+      return res.json({
+        student: {
+          id: targetId,
+          fullName: data.fullName || data.fullname || data.name || null,
+          branch: data.branch || null,
+          section: data.section || null,
+          year: data.yearOfStudy || data.year || null,
+          rollNumber: data.rollNumber || null,
+          graduationYear: data.graduationYear || null,
+
+          // keep this if you want to show portfolio sections (skills, links, etc.)
+          profile: data.profile || {},
+
+          cpHandles: data.cpHandles || {},
+        },
+        cpScores,
+        platformStats,
+      });
+    } catch (err: any) {
+      console.error("[STUDENT /profile/:id] error:", err);
+      return res
+        .status(500)
+        .json({ message: err.message || "Failed to load student profile" });
+    }
+  }
+);
+
+/* ==================================================
+ * FULL PROFILE (ME) → GET /api/student/profile
  * ================================================== */
 router.get(
   "/profile",
@@ -402,7 +441,6 @@ router.get(
       const snap = await ref.get();
 
       if (!snap.exists) {
-        // No student doc at all → only case we truly say "onboarding required"
         return res.status(404).json({
           message: "Student profile not found",
           onboardingRequired: true,
@@ -411,8 +449,6 @@ router.get(
 
       const data = snap.data() || {};
 
-      // ✅ If the doc exists but onboardingCompleted is false/undefined,
-      //    we *auto-upgrade* them to completed instead of 403-ing.
       let onboardingCompleted = data.onboardingCompleted === true;
 
       if (!onboardingCompleted) {
@@ -450,6 +486,132 @@ router.get(
       return res
         .status(500)
         .json({ message: err.message || "Failed to load profile" });
+    }
+  }
+);
+
+/* ==================================================
+ * UPDATE PROFILE (ME) → PUT /api/student/profile
+ * ================================================== */
+router.put(
+  "/profile",
+  authMiddleware,
+  requireStudent,
+  async (req: AuthedReq, res: Response) => {
+    try {
+      const studentId = req.user!.sub;
+
+      const {
+        fullname,
+        collegeEmail,
+        personalEmail,
+        phone,
+        branch,
+        section,
+        year,
+        rollNumber,
+        graduationYear,
+        cpHandles,
+        profile,
+      } = req.body as {
+        fullname?: string;
+        collegeEmail?: string | null;
+        personalEmail?: string | null;
+        phone?: string | null;
+        branch?: string | null;
+        section?: string | null;
+        year?: string | null;
+        rollNumber?: string | null;
+        graduationYear?: string | null;
+        cpHandles?: {
+          leetcode?: string | null;
+          codeforces?: string | null;
+          codechef?: string | null;
+          github?: string | null;
+          hackerrank?: string | null;
+          atcoder?: string | null;
+        };
+        profile?: any;
+      };
+
+      if (phone && String(phone).replace(/\D/g, "").length < 8) {
+        return res.status(400).json({ message: "Phone number looks too short." });
+      }
+
+      const ref = studentsCol.doc(studentId);
+      const snap = await ref.get();
+
+      if (!snap.exists) {
+        return res.status(404).json({
+          message: "Student profile not found",
+          onboardingRequired: true,
+        });
+      }
+
+      const updateDoc: Record<string, any> = {
+        updatedAt: FieldValue.serverTimestamp(),
+        onboardingCompleted: true,
+      };
+
+      if (fullname !== undefined) updateDoc.fullName = fullname || null;
+      if (collegeEmail !== undefined) updateDoc.collegeEmail = collegeEmail || null;
+      if (personalEmail !== undefined) updateDoc.personalEmail = personalEmail || null;
+      if (phone !== undefined) updateDoc.phone = phone || null;
+
+      if (branch !== undefined) updateDoc.branch = branch || null;
+      if (section !== undefined) updateDoc.section = section || null;
+
+      if (year !== undefined) {
+        updateDoc.yearOfStudy = year || null;
+        updateDoc.year = year || null; // backward compatibility
+      }
+
+      if (rollNumber !== undefined) updateDoc.rollNumber = rollNumber || null;
+      if (graduationYear !== undefined)
+        updateDoc.graduationYear = graduationYear || null;
+
+      if (cpHandles !== undefined) {
+        updateDoc.cpHandles = {
+          leetcode: cpHandles?.leetcode || null,
+          codeforces: cpHandles?.codeforces || null,
+          codechef: cpHandles?.codechef || null,
+          atcoder: cpHandles?.atcoder || null,
+          hackerrank: cpHandles?.hackerrank || null,
+          github: cpHandles?.github || null,
+        };
+      }
+
+      if (profile !== undefined) {
+        updateDoc.profile = profile || {};
+      }
+
+      await ref.set(updateDoc, { merge: true });
+
+      const after = (await ref.get()).data() || {};
+      return res.json({
+        id: studentId,
+        fullname: after.fullName || after.fullname || null,
+
+        collegeEmail: after.collegeEmail || null,
+        personalEmail: after.personalEmail || null,
+        phone: after.phone || null,
+
+        branch: after.branch || null,
+        section: after.section || null,
+        year: after.yearOfStudy || after.year || null,
+        rollNumber: after.rollNumber || null,
+        graduationYear: after.graduationYear || null,
+
+        cpHandles: after.cpHandles || {},
+        profile: after.profile || {},
+
+        onboardingCompleted: true,
+      });
+    } catch (err: any) {
+      console.error("[STUDENT PUT /profile] error:", err);
+      return res
+        .status(500)
+        .json({ message: err.message || "Failed to update profile" });
     }
   }
 );

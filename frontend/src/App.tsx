@@ -20,6 +20,9 @@ import ResourcesPage from "./pages/ResourcesPage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 
+// ✅ NEW: public student view page (clicked from leaderboard)
+import StudentPublicProfilePage from "./pages/StudentPublicProfilePage";
+
 // CAREER SUITE
 import CareerSuitePage from "./pages/CareerSuitePage";
 import ResumeBuilderPage from "./pages/ResumeBuilderPage";
@@ -75,7 +78,6 @@ export default function App() {
                 requireOnboarding={false}
                 authVersion={authVersion}
               >
-
                 <OnboardingPage />
               </ProtectedRoute>
             }
@@ -85,10 +87,7 @@ export default function App() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <DashboardPage />
               </ProtectedRoute>
             }
@@ -97,10 +96,7 @@ export default function App() {
           <Route
             path="/leaderboard"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <LeaderboardPage />
               </ProtectedRoute>
             }
@@ -109,10 +105,7 @@ export default function App() {
           <Route
             path="/codepad"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <CodePadPage />
               </ProtectedRoute>
             }
@@ -121,10 +114,7 @@ export default function App() {
           <Route
             path="/contests"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <ContestsPage />
               </ProtectedRoute>
             }
@@ -133,32 +123,36 @@ export default function App() {
           <Route
             path="/resources"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <ResourcesPage />
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/ai-assistance"
             element={
-              <ProtectedRoute allowedRoles={["student"]}>
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <CSAiPage />
               </ProtectedRoute>
             }
           />
 
+          {/* ✅ NEW: view other student's profile (from leaderboard click) */}
+          <Route
+            path="/profile/:id"
+            element={
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
+                <StudentPublicProfilePage />
+              </ProtectedRoute>
+            }
+          />
 
+          {/* Your own profile */}
           <Route
             path="/profile"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <ProfilePage />
               </ProtectedRoute>
             }
@@ -167,10 +161,7 @@ export default function App() {
           <Route
             path="/settings"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <SettingsPage />
               </ProtectedRoute>
             }
@@ -180,10 +171,7 @@ export default function App() {
           <Route
             path="/career"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <CareerSuitePage />
               </ProtectedRoute>
             }
@@ -192,10 +180,7 @@ export default function App() {
           <Route
             path="/career/resume-builder"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <ResumeBuilderPage />
               </ProtectedRoute>
             }
@@ -204,10 +189,7 @@ export default function App() {
           <Route
             path="/career/ats-analyzer"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <ATSAnalyzerPage />
               </ProtectedRoute>
             }
@@ -216,10 +198,7 @@ export default function App() {
           <Route
             path="/career/job-suggestions"
             element={
-              <ProtectedRoute
-                allowedRoles={["student"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
                 <JobSuggestionsPage />
               </ProtectedRoute>
             }
@@ -229,10 +208,7 @@ export default function App() {
           <Route
             path="/instructor/dashboard"
             element={
-              <ProtectedRoute
-                allowedRoles={["instructor"]}
-                authVersion={authVersion}
-              >
+              <ProtectedRoute allowedRoles={["instructor"]} authVersion={authVersion}>
                 <InstructorDashboard />
               </ProtectedRoute>
             }

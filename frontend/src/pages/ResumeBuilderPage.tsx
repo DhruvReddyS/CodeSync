@@ -2140,10 +2140,10 @@ export default function ResumeBuilderPage() {
   let stage: HTMLDivElement | null = null;
 
   try {
-    const inner = previewInnerRef.current;
-    if (!inner) return;
+    const outer = previewOuterRef.current; // ✅ export outer (has CSS vars)
+    if (!outer) return;
 
-    // Create a hidden A4 stage INSIDE viewport (not off-screen)
+    // Create a hidden A4 stage INSIDE viewport (paintable)
     stage = document.createElement("div");
     stage.style.position = "fixed";
     stage.style.left = "0px";
@@ -2153,37 +2153,52 @@ export default function ResumeBuilderPage() {
     stage.style.background = "#ffffff";
     stage.style.overflow = "hidden";
     stage.style.zIndex = "999999";
-    stage.style.opacity = "0"; // invisible but still renderable
+    stage.style.opacity = "0.01"; // ✅ NOT 0 (html2canvas can skip painting)
     stage.style.pointerEvents = "none";
     stage.style.boxSizing = "border-box";
 
-    const clone = inner.cloneNode(true) as HTMLElement;
-    clone.style.width = `${A4_W}px`;
-    clone.style.transform = "none";
-    clone.style.transformOrigin = "top left";
-    clone.style.boxSizing = "border-box";
+    // ✅ Clone the FULL A4 preview stage (includes CSS vars and white bg)
+    const cloneOuter = outer.cloneNode(true) as HTMLElement;
 
-    stage.appendChild(clone);
+    // Ensure it’s exactly A4
+    cloneOuter.style.width = `${A4_W}px`;
+    cloneOuter.style.height = `${A4_H}px`;
+    cloneOuter.style.overflow = "hidden";
+    cloneOuter.style.background = "#ffffff";
+    cloneOuter.style.boxSizing = "border-box";
+
+    // ✅ The first child is your inner wrapper (the one you scale in preview)
+    const cloneInner = cloneOuter.firstElementChild as HTMLElement | null;
+    if (cloneInner) {
+      cloneInner.style.transformOrigin = "top left";
+      cloneInner.style.transform = "none"; // reset preview scaling for export
+      cloneInner.style.width = `${A4_W}px`;
+      cloneInner.style.boxSizing = "border-box";
+    }
+
+    stage.appendChild(cloneOuter);
     document.body.appendChild(stage);
 
-    // Wait a frame + fonts (important to avoid blank/unstyled capture)
+    // Wait a frame + fonts (prevents blank/unstyled capture)
     await new Promise((r) => requestAnimationFrame(() => r(null)));
     // @ts-ignore
     if (document.fonts?.ready) {
       // @ts-ignore
       await document.fonts.ready;
     }
-    await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 40));
 
-    // Fit content into single A4
-    const contentW = clone.scrollWidth || A4_W;
-    const contentH = clone.scrollHeight || A4_H;
-    const exportScale = Math.min(1, A4_W / contentW, A4_H / contentH);
-    clone.style.transform = `scale(${exportScale})`;
+    // ✅ Fit content into single A4 (export only)
+    if (cloneInner) {
+      const contentW = cloneInner.scrollWidth || A4_W;
+      const contentH = cloneInner.scrollHeight || A4_H;
+      const exportScale = Math.min(1, A4_W / contentW, A4_H / contentH);
+      cloneInner.style.transform = `scale(${exportScale})`;
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    }
 
-    await new Promise((r) => requestAnimationFrame(() => r(null)));
-
-    const canvas = await html2canvas(stage, {
+    // Capture
+    const canvas = await html2canvas(cloneOuter, {
       scale: 2,
       backgroundColor: "#ffffff",
       useCORS: true,
@@ -2210,6 +2225,7 @@ export default function ResumeBuilderPage() {
     if (stage && stage.parentNode) stage.parentNode.removeChild(stage);
   }
 }
+
 
   /* ---------------------------------------------
    * Render

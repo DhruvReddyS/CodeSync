@@ -4,6 +4,19 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../lib/apiClient";
 
+// ✅ Firebase (must export auth, db from ../lib/firebaseClient)
+import { auth, db } from "../lib/firebaseClient";
+import { onAuthStateChanged } from "firebase/auth";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  where,
+} from "firebase/firestore";
+
 import {
   FiSearch,
   FiFilter,
@@ -94,19 +107,65 @@ const LeaderboardPage: React.FC = () => {
   const [sectionFilter, setSectionFilter] = useState<string>("ALL");
   const [sortMode, setSortMode] = useState<"score" | "rank">("score");
 
-  // 🔥 for highlighting current user
+  // ✅ highlight current user (Firestore-based)
   const [currentStudentId, setCurrentStudentId] = useState<string | null>(null);
+  const [authUid, setAuthUid] = useState<string | null>(null);
 
-  /* ---------------- FETCH ---------------- */
-
+  /* --------------------------------------------------
+   * CURRENT USER (AUTH + FIRESTORE)
+   * Supports:
+   *  1) students/{uid} doc exists -> use doc.id or studentId field
+   *  2) else query students where userId/authUid/uid/firebaseUid == uid -> use doc.id or studentId field
+   * Fallback: uid
+   * -------------------------------------------------- */
   useEffect(() => {
-    // read currently logged-in student id from localStorage (change key if needed)
-    if (typeof window !== "undefined") {
-      const id = window.localStorage.getItem("codesync_student_id");
-      if (id) setCurrentStudentId(id);
-    }
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u?.uid) {
+        setCurrentStudentId(null);
+        setAuthUid(null);
+        return;
+      }
+      const uid = u.uid;
+      setAuthUid(uid);
+
+      try {
+        // Case A: docId is uid
+        const directSnap = await getDoc(doc(db, "students", uid));
+        if (directSnap.exists()) {
+          const data: any = directSnap.data();
+          const sid = data?.studentId ?? directSnap.id;
+          setCurrentStudentId(String(sid));
+          return;
+        }
+
+        // Case B: doc stores uid in a field (try common field names)
+        const studentsCol = collection(db, "students");
+        const fieldCandidates = ["userId", "authUid", "uid", "firebaseUid"] as const;
+
+        for (const field of fieldCandidates) {
+          const qy = query(studentsCol, where(field, "==", uid), limit(1));
+          const snap = await getDocs(qy);
+          if (!snap.empty) {
+            const d = snap.docs[0];
+            const data: any = d.data();
+            const sid = data?.studentId ?? d.id;
+            setCurrentStudentId(String(sid));
+            return;
+          }
+        }
+
+        // fallback: still highlight by uid (in case backend uses uid as studentId)
+        setCurrentStudentId(uid);
+      } catch (e) {
+        console.error("[Leaderboard] current user lookup failed:", e);
+        setCurrentStudentId(uid);
+      }
+    });
+
+    return () => unsub();
   }, []);
 
+  /* ---------------- FETCH ---------------- */
   useEffect(() => {
     (async () => {
       try {
@@ -115,9 +174,7 @@ const LeaderboardPage: React.FC = () => {
 
         const res = await apiClient.get<ApiResponse>(
           "/student/stats/leaderboard",
-          {
-            params: { limit: 250 },
-          }
+          { params: { limit: 250 } }
         );
 
         const list = (res.data?.leaderboard || []).map((e) => ({
@@ -140,7 +197,6 @@ const LeaderboardPage: React.FC = () => {
   }, []);
 
   /* ---------------- FILTER OPTIONS ---------------- */
-
   const uniqueBranches = useMemo(() => {
     const set = new Set<string>();
     entries.forEach((e) => e.branch && set.add(e.branch));
@@ -162,19 +218,12 @@ const LeaderboardPage: React.FC = () => {
   }, [entries]);
 
   /* ---------------- FILTER + SORT ---------------- */
-
   useEffect(() => {
     let list = [...entries];
 
-    if (yearFilter !== "ALL") {
-      list = list.filter((e) => String(e.year) === yearFilter);
-    }
-    if (branchFilter !== "ALL") {
-      list = list.filter((e) => e.branch === branchFilter);
-    }
-    if (sectionFilter !== "ALL") {
-      list = list.filter((e) => e.section === sectionFilter);
-    }
+    if (yearFilter !== "ALL") list = list.filter((e) => String(e.year) === yearFilter);
+    if (branchFilter !== "ALL") list = list.filter((e) => e.branch === branchFilter);
+    if (sectionFilter !== "ALL") list = list.filter((e) => e.section === sectionFilter);
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -185,9 +234,7 @@ const LeaderboardPage: React.FC = () => {
           .join(" ")
           .toLowerCase();
         const rollStr = (e.rollNumber || "").toLowerCase();
-        return (
-          name.includes(q) || handleStr.includes(q) || rollStr.includes(q)
-        );
+        return name.includes(q) || handleStr.includes(q) || rollStr.includes(q);
       });
     }
 
@@ -202,7 +249,6 @@ const LeaderboardPage: React.FC = () => {
   }, [entries, branchFilter, yearFilter, sectionFilter, search, sortMode]);
 
   /* ---------------- SUMMARY STATS ---------------- */
-
   const totalUsers = entries.length;
   const totalScore = entries.reduce(
     (acc, e) => acc + (e.cpScores?.displayScore ?? 0),
@@ -224,16 +270,12 @@ const LeaderboardPage: React.FC = () => {
   const top3 = filtered.slice(0, 3);
   const tableEntries = filtered;
 
-  const handleProfileClick = (id: string) => {
-    navigate(`/profile/${id}`);
-  };
+  const handleProfileClick = (id: string) => navigate(`/profile/${id}`);
 
   /* ---------------- LOADING ---------------- */
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#02030a] text-slate-100 flex items-center justify-center relative overflow-hidden">
-        {/* Glow orbs */}
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-32 -left-10 h-64 w-64 rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.28),_transparent_60%)] blur-2xl" />
           <div className="absolute -bottom-40 -right-16 h-72 w-72 rounded-full bg-[radial-gradient(circle_at_center,_rgba(244,114,182,0.26),_transparent_60%)] blur-2xl" />
@@ -241,7 +283,6 @@ const LeaderboardPage: React.FC = () => {
         </div>
 
         <div className="relative flex flex-col items-center gap-6 px-4">
-          {/* Logo orb */}
           <div className="relative">
             <div className="h-20 w-20 rounded-3xl bg-slate-950/90 border border-slate-800 flex items-center justify-center shadow-[0_0_40px_rgba(56,189,248,0.8)]">
               <div className="relative flex items-center justify-center">
@@ -254,13 +295,11 @@ const LeaderboardPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Spinning ring */}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="h-24 w-24 rounded-full border border-slate-800 border-t-sky-400/80 border-r-fuchsia-400/70 animate-spin [animation-duration:1.4s]" />
             </div>
           </div>
 
-          {/* Text */}
           <div className="text-center space-y-1">
             <p className="text-[0.7rem] uppercase tracking-[0.3em] text-slate-500">
               Syncing your coding universe
@@ -272,9 +311,8 @@ const LeaderboardPage: React.FC = () => {
               </span>
             </h1>
             <p className="text-[0.75rem] sm:text-xs text-slate-400 max-w-md mx-auto">
-              Pulling live stats from LeetCode, CodeChef, Codeforces,
-              HackerRank, AtCoder and GitHub. This is your all-in-one campus
-              ladder.
+              Pulling live stats from LeetCode, CodeChef, Codeforces, HackerRank,
+              AtCoder and GitHub.
             </p>
           </div>
         </div>
@@ -283,7 +321,6 @@ const LeaderboardPage: React.FC = () => {
   }
 
   /* ---------------- PAGE ---------------- */
-
   return (
     <div className="min-h-screen bg-[#02020a] text-slate-100 relative overflow-hidden">
       {/* Background glows + grid */}
@@ -297,29 +334,26 @@ const LeaderboardPage: React.FC = () => {
       {/* Keyframes */}
       <style>
         {`
-        @keyframes floaty {
-          0%, 100% { transform: translateY(0px);}
-          50% { transform: translateY(-6px);}
-        }
-        @keyframes shimmer {
-          0% { background-position: -150% 0; }
-          100% { background-position: 150% 0; }
-        }
-        .animate-floaty { animation: floaty 4.5s ease-in-out infinite; }
-        .animate-shimmer {
-          background-image: linear-gradient(110deg, transparent, rgba(255,255,255,0.12), transparent);
-          background-size: 200% 100%;
-          animation: shimmer 3.5s linear infinite;
-        }
+          @keyframes floaty {
+            0%, 100% { transform: translateY(0px);}
+            50% { transform: translateY(-6px);}
+          }
+          @keyframes shimmer {
+            0% { background-position: -150% 0; }
+            100% { background-position: 150% 0; }
+          }
+          .animate-floaty { animation: floaty 4.5s ease-in-out infinite; }
+          .animate-shimmer {
+            background-image: linear-gradient(110deg, transparent, rgba(255,255,255,0.12), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 3.5s linear infinite;
+          }
         `}
       </style>
 
       <main className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-10">
-        {/* ------------------------------------------------------------
-         * HEADER – orb + title + stats
-         * ------------------------------------------------------------ */}
+        {/* HEADER */}
         <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          {/* Left: CodeSync orb + text + search */}
           <div className="flex items-center gap-4">
             {/* Mini orb */}
             <div className="relative">
@@ -350,9 +384,8 @@ const LeaderboardPage: React.FC = () => {
                 </span>
               </h1>
               <p className="mt-2 text-xs sm:text-sm text-slate-400 max-w-xl">
-                One scoreboard for your entire coding grind – problems,
-                contests, ratings and commits folded into a single CodeSync
-                score.
+                One scoreboard for your entire coding grind – problems, contests,
+                ratings and commits folded into a single CodeSync score.
               </p>
 
               {/* Search bar */}
@@ -393,9 +426,7 @@ const LeaderboardPage: React.FC = () => {
           </div>
         </section>
 
-        {/* ------------------------------------------------------------
-         * FILTER STRIP
-         * ------------------------------------------------------------ */}
+        {/* FILTER STRIP */}
         <section className="rounded-2xl border border-slate-800 bg-slate-950/85 px-4 sm:px-5 py-3 sm:py-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between backdrop-blur-xl">
           <div className="flex flex-wrap gap-2 text-[0.7rem]">
             <FilterChip
@@ -462,9 +493,7 @@ const LeaderboardPage: React.FC = () => {
           </div>
         </section>
 
-        {/* ------------------------------------------------------------
-         * PODIUM TOP 3
-         * ------------------------------------------------------------ */}
+        {/* PODIUM TOP 3 */}
         <section className="space-y-5">
           <div className="flex items-center justify-between">
             <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
@@ -518,9 +547,7 @@ const LeaderboardPage: React.FC = () => {
           </div>
         </section>
 
-        {/* ------------------------------------------------------------
-         * TABLE
-         * ------------------------------------------------------------ */}
+        {/* TABLE */}
         <section className="mt-2 space-y-3 pb-10">
           <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#050712]/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.9)]">
             {/* DESKTOP HEADER */}
@@ -544,8 +571,13 @@ const LeaderboardPage: React.FC = () => {
               {tableEntries.map((entry, idx) => {
                 const score = entry.cpScores?.displayScore ?? 0;
                 const isTop10 = entry.rank <= 10;
+
+                // ✅ highlight logic: compare entry.studentId with Firestore derived + auth uid fallback
+                const entryId = String(entry.studentId ?? "");
+                const meA = currentStudentId ? String(currentStudentId) : "";
+                const meB = authUid ? String(authUid) : "";
                 const isCurrentUser =
-                  currentStudentId && entry.studentId === currentStudentId;
+                  (meA && entryId === meA) || (meB && entryId === meB);
 
                 const rankChipBase =
                   entry.rank === 1
@@ -575,7 +607,7 @@ const LeaderboardPage: React.FC = () => {
                     key={entry.studentId ?? `${entry.rank}-${idx}`}
                     type="button"
                     onClick={() => handleProfileClick(entry.studentId)}
-                    className={`w-full text-left group active:scale-[0.995] transition-transform`}
+                    className="w-full text-left group active:scale-[0.995] transition-transform"
                   >
                     {/* DESKTOP ROW */}
                     <div
@@ -618,13 +650,16 @@ const LeaderboardPage: React.FC = () => {
                               (entry.name || "U")[0]?.toUpperCase()
                             )}
                           </div>
+
                           {isTop10 && !isCurrentUser && (
                             <span className="pointer-events-none absolute inset-0 rounded-full ring-1 ring-sky-500/40" />
                           )}
+
                           {isCurrentUser && (
                             <span className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-sky-400/70" />
                           )}
                         </div>
+
                         <div className="flex flex-col">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-slate-100 group-hover:text-sky-200">
@@ -665,16 +700,15 @@ const LeaderboardPage: React.FC = () => {
 
                       {/* Total score */}
                       <div className="flex flex-col gap-1">
-                        <span className="text-[0.8rem] font-semibold text-emerald-300">
+                        <span className="text-[0.8rem] font-semibold text-emerald-300 tabular-nums">
                           {formatScore(score)}
                         </span>
                       </div>
 
-                      {/* Platform scores with tooltips */}
+                      {/* Platform cells */}
                       {PLATFORM_ORDER.map((p) => (
                         <PlatformCell
                           key={p}
-                          label={p.toUpperCase()}
                           colorClass={
                             p === "leetcode"
                               ? "text-amber-300"
@@ -708,16 +742,11 @@ const LeaderboardPage: React.FC = () => {
                         >
                           {entry.rank}
                         </span>
+
                         <div className="flex-1 flex items-center gap-2">
                           <div
                             className={`h-7 w-7 rounded-full border overflow-hidden flex items-center justify-center text-[0.7rem] font-semibold bg-slate-900 ${
-                              entry.rank === 1
-                                ? "border-amber-400/90"
-                                : entry.rank === 2
-                                ? "border-slate-300/90"
-                                : entry.rank === 3
-                                ? "border-amber-600/90"
-                                : "border-slate-700"
+                              isCurrentUser ? "border-sky-400/70" : "border-slate-700"
                             }`}
                           >
                             {entry.avatarUrl ? (
@@ -730,6 +759,7 @@ const LeaderboardPage: React.FC = () => {
                               (entry.name || "U")[0]?.toUpperCase()
                             )}
                           </div>
+
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-medium text-slate-100 group-hover:text-sky-200">
@@ -741,14 +771,14 @@ const LeaderboardPage: React.FC = () => {
                                 </span>
                               )}
                             </div>
+
                             <p className="text-[0.7rem] text-slate-500">
                               {entry.branch || "—"} ·{" "}
-                              {entry.section
-                                ? `Sec ${entry.section}`
-                                : "Section —"}{" "}
-                              · {entry.year || "Year —"}
+                              {entry.section ? `Sec ${entry.section}` : "Section —"} ·{" "}
+                              {entry.year || "Year —"}
                             </p>
-                            <p className="mt-1 text-[0.7rem] text-emerald-300">
+
+                            <p className="mt-1 text-[0.7rem] text-emerald-300 tabular-nums">
                               Score: {formatScore(score)}
                             </p>
                           </div>
@@ -773,18 +803,16 @@ const LeaderboardPage: React.FC = () => {
                                 : "text-indigo-300"
                             }
                           >
-                            {p === "leetcode"
-                              ? "LC"
-                              : p === "codechef"
-                              ? "CC"
-                              : p === "hackerrank"
-                              ? "HR"
-                              : p === "codeforces"
-                              ? "CF"
-                              : p === "github"
-                              ? "GH"
-                              : "AC"}
-                            : {formatScore(getPlatformScore(entry, p))}
+                            {(p === "leetcode" && "LC") ||
+                              (p === "codechef" && "CC") ||
+                              (p === "hackerrank" && "HR") ||
+                              (p === "codeforces" && "CF") ||
+                              (p === "github" && "GH") ||
+                              "AC"}
+                            :{" "}
+                            <span className="tabular-nums">
+                              {formatScore(getPlatformScore(entry, p))}
+                            </span>
                           </span>
                         ))}
                       </div>
@@ -913,9 +941,6 @@ type PodiumCardProps = {
   onClick: (id: string) => void;
 };
 
-/**
- * Podium card with glass + glows + animated float
- */
 const PodiumCard: React.FC<PodiumCardProps> = ({
   entry,
   size,
@@ -957,7 +982,8 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
       label: "Silver · Rank 2",
       badgeIcon: <FaMedal className="text-[0.7rem]" />,
       pedestalClass: "h-2.5",
-      borderGlow: "border-slate-300/70 shadow-[0_0_36px_rgba(148,163,184,0.35)]",
+      borderGlow:
+        "border-slate-300/70 shadow-[0_0_36px_rgba(148,163,184,0.35)]",
     },
     bronze: {
       chipBg:
@@ -993,12 +1019,9 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
         ${cfg.borderGlow}
       `}
     >
-      {/* soft gradient inside */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/40 opacity-60" />
 
-      {/* CONTENT */}
       <div className="relative flex-1 flex flex-col items-center w-full gap-3">
-        {/* header chip row */}
         <div className="flex w-full items-center justify-between text-[0.7rem]">
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-[2px] font-semibold ${cfg.chipBg}`}
@@ -1006,6 +1029,7 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
             {cfg.badgeIcon}
             {cfg.label}
           </span>
+
           {variant === "gold" && (
             <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/70 bg-amber-500/15 px-2 py-[2px] text-[0.6rem] font-semibold text-amber-100">
               <FaTrophy className="text-[0.65rem]" />
@@ -1014,7 +1038,6 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
           )}
         </div>
 
-        {/* avatar with ring */}
         <div className="mt-1">
           <div
             className={`h-20 w-20 rounded-full bg-gradient-to-br ${cfg.ringFrom} ${cfg.ringTo} p-[3px]`}
@@ -1033,7 +1056,6 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
           </div>
         </div>
 
-        {/* name + meta */}
         <div className="text-center space-y-1">
           <p className="text-sm font-semibold text-slate-50 line-clamp-2">
             {entry.name || "Unknown"}
@@ -1045,17 +1067,15 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
           </p>
         </div>
 
-        {/* total score */}
         <div className="flex flex-col items-center gap-1 mt-1">
           <p className="text-[0.65rem] text-slate-400 uppercase tracking-[0.22em]">
             Total CodeSync score
           </p>
-          <p className="text-2xl font-bold text-emerald-300">
+          <p className="text-2xl font-bold text-emerald-300 tabular-nums">
             {score.toLocaleString("en-IN")}
           </p>
         </div>
 
-        {/* platform breakdown */}
         <div className="mt-3 w-full rounded-2xl bg-[#020617]/90 border border-slate-800 px-3 py-2">
           <p className="text-[0.65rem] text-slate-400 mb-1">
             Platform breakdown
@@ -1068,7 +1088,7 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
                 title={`${p.label}: ${formatScore(p.value)}`}
               >
                 <span className="text-slate-400 truncate">{p.label}</span>
-                <span className="font-semibold text-slate-100 group-hover:text-sky-200">
+                <span className="font-semibold text-slate-100 group-hover:text-sky-200 tabular-nums">
                   {formatScore(p.value)}
                 </span>
               </div>
@@ -1077,7 +1097,6 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
         </div>
       </div>
 
-      {/* pedestal neon bar */}
       <div className="relative w-full flex justify-center mt-2">
         <div
           className={`rounded-full bg-gradient-to-r ${cfg.ringFrom} ${cfg.ringTo} ${cfg.pedestalClass} w-32 blur-[1px]`}
@@ -1088,7 +1107,6 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
 };
 
 type PlatformCellProps = {
-  label: string;
   fullLabel: string;
   colorClass: string;
   value: number;
@@ -1103,7 +1121,7 @@ const PlatformCell: React.FC<PlatformCellProps> = ({
 
   return (
     <div
-      className={`relative text-[0.75rem] ${colorClass} group`}
+      className={`relative text-[0.75rem] ${colorClass} group tabular-nums`}
       title={`${fullLabel}: ${formatted}`}
     >
       {formatted}
