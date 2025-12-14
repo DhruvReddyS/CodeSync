@@ -1,6 +1,6 @@
 // backend/src/server.ts
 import dotenv from "dotenv";
-dotenv.config(); // ✅ load .env FIRST (Render also injects env vars)
+dotenv.config(); // ✅ load env vars (Render injects automatically)
 
 import express from "express";
 import cors from "cors";
@@ -20,10 +20,10 @@ import { firestore, FieldValue } from "./config/firebase";
 
 const app = express();
 
-/* --------------------------------------------------
- * CORS (Render + Local)
- * -------------------------------------------------- */
-const FRONTEND_URL = (process.env.FRONTEND_URL || "").trim(); // e.g. https://codesync-web.onrender.com
+/* ==================================================
+ * ✅ CORS CONFIG (LOCAL + RENDER)
+ * ================================================== */
+const FRONTEND_URL = (process.env.FRONTEND_URL || "").trim(); // https://codesync-mvsr.onrender.com
 
 const allowedOrigins = new Set<string>([
   "http://localhost:5173",
@@ -32,80 +32,83 @@ const allowedOrigins = new Set<string>([
   "http://127.0.0.1:3000",
 ]);
 
-if (FRONTEND_URL) allowedOrigins.add(FRONTEND_URL);
+if (FRONTEND_URL) {
+  allowedOrigins.add(FRONTEND_URL);
+}
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      // allow server-to-server / curl / postman (no origin)
+      // allow Postman / server-to-server
       if (!origin) return cb(null, true);
       if (allowedOrigins.has(origin)) return cb(null, true);
-      return cb(new Error(`CORS blocked origin: ${origin}`));
+      return cb(new Error(`❌ CORS blocked origin: ${origin}`));
     },
-    credentials: true,
+    credentials: false, // ✅ Bearer token auth (NO cookies)
   })
 );
 
-/* --------------------------------------------------
- * BODY LIMITS
- * -------------------------------------------------- */
+/* ==================================================
+ * BODY PARSERS
+ * ================================================== */
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-/* --------------------------------------------------
+/* ==================================================
  * REQUEST LOGGER
- * -------------------------------------------------- */
+ * ================================================== */
 app.use((req, _res, next) => {
   console.log(`[${req.method}] ${req.originalUrl}`);
   next();
 });
 
-/* --------------------------------------------------
+/* ==================================================
  * ROUTES
- * -------------------------------------------------- */
+ * ================================================== */
 app.use("/api/auth", authRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/instructor", instructorRoutes);
 
-// Career suite
+// Career Suite
 app.use("/api/career", careerRoutes);
 
-// CodePad + contests
+// CodePad + Contests
 app.use("/api", codepadRoutes);
 app.use("/api", contestsRouter);
 
 // AI
 app.use("/api/ai", aiRoutes);
 
-// Health
+/* ==================================================
+ * HEALTH CHECK
+ * ================================================== */
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     env: {
-      hasFrontendUrl: !!FRONTEND_URL,
       nodeEnv: process.env.NODE_ENV || "unknown",
+      frontendUrl: FRONTEND_URL || "not-set",
     },
-    hint: {
-      ats: "POST /api/career/ats-analyzer",
-      studentStats: "GET /api/student/stats/me",
-    },
+    time: new Date().toISOString(),
   });
 });
 
-/* --------------------------------------------------
- * Ensure default instructor user exists (ONE-TIME)
- * -------------------------------------------------- */
+/* ==================================================
+ * ENSURE DEFAULT INSTRUCTOR (ONE-TIME SAFE)
+ * ================================================== */
 async function ensureDefaultInstructor() {
   const usersCol = firestore.collection("users");
   const instructorsCol = firestore.collection("instructors");
 
-  const email = (process.env.DEFAULT_INSTRUCTOR_EMAIL || "instructor@gmail.com").trim();
-  const password = process.env.DEFAULT_INSTRUCTOR_PASSWORD || "instructor@1234";
-  const name = (process.env.DEFAULT_INSTRUCTOR_NAME || "Default Instructor").trim();
+  const email =
+    (process.env.DEFAULT_INSTRUCTOR_EMAIL || "instructor@gmail.com").trim();
+  const password =
+    process.env.DEFAULT_INSTRUCTOR_PASSWORD || "instructor@1234";
+  const name =
+    (process.env.DEFAULT_INSTRUCTOR_NAME || "Default Instructor").trim();
 
   try {
     const snap = await usersCol.where("email", "==", email).limit(1).get();
-
     let userId: string;
 
     if (snap.empty) {
@@ -121,29 +124,26 @@ async function ensureDefaultInstructor() {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      console.log("✅ Created default instructor user document.");
+      console.log("✅ Created default instructor user.");
     } else {
       const doc = snap.docs[0];
       userId = doc.id;
 
-      // ensure role + name only (DO NOT touch password here)
       await doc.ref.set(
         {
-          email,
-          name: doc.data().name || name,
           role: "instructor",
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
 
-      console.log("✅ Default instructor user exists (role ensured).");
+      console.log("✅ Instructor user already exists.");
     }
 
     const instructorRef = instructorsCol.doc(userId);
     const instructorSnap = await instructorRef.get();
 
-    // 🔥 IMPORTANT: only set password if instructor doc does NOT exist
+    // 🔐 Only set password ONCE
     if (!instructorSnap.exists) {
       const passwordHash = await bcrypt.hash(password, 10);
 
@@ -154,23 +154,23 @@ async function ensureDefaultInstructor() {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      console.log("✅ Created instructor login (password set once).");
+      console.log("🔐 Instructor login created");
       console.log(`   Email: ${email}`);
       console.log(`   Password: ${password}`);
     } else {
-      console.log("✅ Instructor login already exists (password untouched).");
+      console.log("🔐 Instructor login already exists (password unchanged)");
     }
   } catch (err) {
     console.error("❌ Error ensuring default instructor:", err);
   }
 }
 
-/* --------------------------------------------------
+/* ==================================================
  * START SERVER (Render needs 0.0.0.0)
- * -------------------------------------------------- */
+ * ================================================== */
 const PORT = Number(process.env.PORT || 5000);
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 CodeSync API running on port ${PORT}`);
   ensureDefaultInstructor();
 });
