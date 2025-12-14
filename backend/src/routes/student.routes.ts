@@ -25,8 +25,6 @@ const studentsCol = firestore.collection(STUDENTS_COLLECTION);
 
 /* --------------------------------------------------
  * Helper: Load a map of PlatformId → FULL scraped stats
- *   - Returns ALL fields stored in cpProfiles/<platform>
- *   - Shape is Record<PlatformId, any | null> for flexibility
  * -------------------------------------------------- */
 async function loadPlatformStatsMap(
   studentId: string
@@ -46,7 +44,6 @@ async function loadPlatformStatsMap(
     const data = doc.data() as any;
     const platform = data.platform as PlatformId;
 
-    // Preserve ALL scraped fields.
     if (platform in map) {
       map[platform] = { ...data };
     }
@@ -117,19 +114,17 @@ router.post(
       const dataToSet: Record<string, any> = {
         userId: studentId,
 
-        // Basic + academic info
         fullName,
         collegeEmail: collegeEmail || null,
         personalEmail: personalEmail || null,
         phone: phone || null,
         branch,
         yearOfStudy,
-        year: yearOfStudy, // backward compatibility
+        year: yearOfStudy,
         section,
         rollNumber,
         graduationYear,
 
-        // Coding handles used by scrapers/scoring
         cpHandles: {
           leetcode: codingHandles?.leetcode || null,
           codeforces: codingHandles?.codeforces || null,
@@ -139,7 +134,6 @@ router.post(
           github: codingHandles?.github || null,
         },
 
-        // Portfolio snapshot
         profile: profile || {},
 
         onboardingCompleted: true,
@@ -152,7 +146,6 @@ router.post(
 
       await studentRef.set(dataToSet, { merge: true });
 
-      // 🔥 AUTO-TRIGGER INITIAL CP REFRESH AFTER ONBOARDING
       const hasAnyHandle =
         !!codingHandles &&
         !!(
@@ -375,8 +368,6 @@ router.get(
 /* ==================================================
  * 👁️ VIEW ANY STUDENT PROFILE (by id)
  * GET /api/student/profile/:id
- *  - Used when clicking a leaderboard row
- *  - Safe fields + cpScores + platformStats (cpProfiles)
  * ================================================== */
 router.get(
   "/profile/:id",
@@ -409,9 +400,12 @@ router.get(
           rollNumber: data.rollNumber || null,
           graduationYear: data.graduationYear || null,
 
-          // keep this if you want to show portfolio sections (skills, links, etc.)
-          profile: data.profile || {},
+          // ✅ added for UI display
+          collegeEmail: data.collegeEmail || null,
+          personalEmail: data.personalEmail || null,
+          phone: data.phone || null,
 
+          profile: data.profile || {},
           cpHandles: data.cpHandles || {},
         },
         cpScores,
@@ -513,26 +507,7 @@ router.put(
         graduationYear,
         cpHandles,
         profile,
-      } = req.body as {
-        fullname?: string;
-        collegeEmail?: string | null;
-        personalEmail?: string | null;
-        phone?: string | null;
-        branch?: string | null;
-        section?: string | null;
-        year?: string | null;
-        rollNumber?: string | null;
-        graduationYear?: string | null;
-        cpHandles?: {
-          leetcode?: string | null;
-          codeforces?: string | null;
-          codechef?: string | null;
-          github?: string | null;
-          hackerrank?: string | null;
-          atcoder?: string | null;
-        };
-        profile?: any;
-      };
+      } = req.body as any;
 
       if (phone && String(phone).replace(/\D/g, "").length < 8) {
         return res.status(400).json({ message: "Phone number looks too short." });
@@ -563,12 +538,11 @@ router.put(
 
       if (year !== undefined) {
         updateDoc.yearOfStudy = year || null;
-        updateDoc.year = year || null; // backward compatibility
+        updateDoc.year = year || null;
       }
 
       if (rollNumber !== undefined) updateDoc.rollNumber = rollNumber || null;
-      if (graduationYear !== undefined)
-        updateDoc.graduationYear = graduationYear || null;
+      if (graduationYear !== undefined) updateDoc.graduationYear = graduationYear || null;
 
       if (cpHandles !== undefined) {
         updateDoc.cpHandles = {
