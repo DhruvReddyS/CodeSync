@@ -8,6 +8,9 @@ import {
   RiUserLine,
   RiSettings3Line,
   RiLogoutBoxRLine,
+  RiDashboardLine,
+  RiTeamLine,
+  RiBarChart2Line,
 } from "react-icons/ri";
 import { auth } from "../lib/firebaseClient";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -45,31 +48,31 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
   const profileRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
-  // 🔔 Demo notifications (you can wire real ones later)
+  // 🔔 Demo notifications (role-aware; can be wired later)
   const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
       id: "1",
-      title: "Check out today’s contests ⚔️",
-      description: "Jump into live contests and push your rank.",
+      title: "Cohort refresh recommended",
+      description: "Scores might be stale. Trigger a refresh to update analytics.",
       time: "Just now",
       read: false,
-      route: "/contests",
+      route: "/instructor/dashboard",
     },
     {
       id: "2",
-      title: "Leaderboard updated 📈",
-      description: "You’ve moved up on the CodeSync board.",
+      title: "Inactive students detected",
+      description: "Several students haven’t been active this week. Review list.",
       time: "10 min ago",
       read: false,
-      route: "/leaderboard",
+      route: "/instructor/students",
     },
     {
       id: "3",
-      title: "New resources unlocked 📚",
-      description: "Fresh sheets, notes & DSA playlists added.",
+      title: "Analytics update",
+      description: "Score distribution changed after last refresh.",
       time: "1 hr ago",
       read: false,
-      route: "/resources",
+      route: "/instructor/analytics",
     },
   ]);
 
@@ -146,16 +149,11 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     "after:transition-all after:duration-300 hover:after:w-full";
 
   function linkClass(isActive: boolean) {
-    return `
-      relative pb-0.5 text-[0.7rem] sm:text-xs 
-      transition-all duration-200 ease-out
-      ${
-        isActive
-          ? "text-slate-50 after:w-full scale-[1.03]"
-          : "text-slate-300 hover:text-slate-100 hover:-translate-y-[1px]"
-      }
-      ${linkGlow}
-    `;
+    return `relative pb-0.5 text-[0.7rem] sm:text-xs transition-all duration-200 ease-out ${
+      isActive
+        ? "text-slate-50 after:w-full scale-[1.03]"
+        : "text-slate-300 hover:text-slate-100 hover:-translate-y-[1px]"
+    } ${linkGlow}`;
   }
 
   /* --------------------------------------------------
@@ -183,19 +181,24 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
 
   const avatarLetter = (displayName && displayName.trim().charAt(0).toUpperCase()) || "U";
 
-  // Student nav links (CS.ai beside Resources)
+  // Student nav links
   const studentLinks = [
     { to: "/dashboard", label: "Dashboard" },
     { to: "/leaderboard", label: "Leaderboard" },
     { to: "/contests", label: "Contests" },
     { to: "/codepad", label: "CodePad" },
-    { to: "/career", label: "Career Suite" }, // ✅ FIXED (was /career/resume)
+    { to: "/career", label: "Career Suite" },
     { to: "/resources", label: "Resources" },
     { to: "/ai-assistance", label: "CS.ai" },
   ];
 
-  // Instructor nav links
-  const instructorLinks = [{ to: "/instructor/dashboard", label: "Dashboard" }];
+  // ✅ Instructor nav links (UPDATED)
+  const instructorLinks = [
+    { to: "/instructor/dashboard", label: "Dashboard", icon: <RiDashboardLine /> },
+    { to: "/instructor/students", label: "Students", icon: <RiTeamLine /> },
+    { to: "/instructor/analytics", label: "Analytics", icon: <RiBarChart2Line /> },
+    { to: "/instructor/settings", label: "Settings", icon: <RiSettings3Line /> },
+  ];
 
   const showLoggedInUI = authReady && isLoggedIn && role !== null;
 
@@ -250,6 +253,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
           </ul>
         )}
 
+        {/* ✅ Instructor nav (UPDATED) */}
         {showLoggedInUI && role === "instructor" && (
           <ul className="hidden lg:flex items-center gap-5 text-[0.7rem] sm:text-xs font-medium uppercase tracking-[0.16em]">
             {instructorLinks.map((link) => (
@@ -325,7 +329,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
                         </div>
                         <p className="text-xs font-medium text-slate-200">No notifications yet</p>
                         <p className="mt-1 text-[0.65rem] text-slate-500 max-w-[13rem]">
-                          You&apos;ll see contest alerts, leaderboard updates and profile tips here.
+                          You&apos;ll see refresh alerts, inactive students, and cohort insights here.
                         </p>
                       </div>
                     ) : (
@@ -394,11 +398,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
                     <div className="flex items-center gap-2 mb-2">
                       <div className="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center border border-slate-700 overflow-hidden">
                         {avatarPhoto ? (
-                          <img
-                            src={avatarPhoto}
-                            className="h-full w-full object-cover rounded-full"
-                            alt="Avatar"
-                          />
+                          <img src={avatarPhoto} className="h-full w-full object-cover rounded-full" alt="Avatar" />
                         ) : (
                           <span className="text-xs font-semibold bg-gradient-to-br from-sky-400 to-fuchsia-400 bg-clip-text text-transparent">
                             {avatarLetter}
@@ -412,16 +412,17 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
                     </div>
 
                     <div className="mt-2 flex flex-col gap-1.5 text-xs sm:text-sm">
+                      {/* ✅ Instructor: send both Profile & Settings to /instructor/settings for now */}
                       <Link
-                        to={role === "student" ? "/profile" : "/instructor/dashboard"}
+                        to={role === "student" ? "/profile" : "/instructor/settings"}
                         className="flex items-center gap-2 text-slate-200 hover:text-sky-400 transition-colors duration-150"
                         onClick={() => setProfileDropdownOpen(false)}
                       >
-                        <RiUserLine /> Profile
+                        <RiUserLine /> {role === "student" ? "Profile" : "Instructor Profile"}
                       </Link>
 
                       <Link
-                        to={role === "student" ? "/settings" : "/instructor/dashboard"}
+                        to={role === "student" ? "/settings" : "/instructor/settings"}
                         className="flex items-center gap-2 text-slate-200 hover:text-sky-400 transition-colors duration-150"
                         onClick={() => setProfileDropdownOpen(false)}
                       >
