@@ -1,4 +1,3 @@
-// frontend/src/pages/instructor/InstructorDashboard.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import apiClient from "../../lib/apiClient";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,34 +15,54 @@ import {
   RiFireLine,
   RiMailLine,
   RiPhoneLine,
+  RiUser3Line,
+  RiHashtag,
+  RiTimeLine,
+  RiLinksLine,
 } from "react-icons/ri";
+
+/* ----------------- TYPES ----------------- */
+
+type PlatformId =
+  | "leetcode"
+  | "codeforces"
+  | "codechef"
+  | "github"
+  | "hackerrank"
+  | "atcoder";
+
+const PLATFORMS: PlatformId[] = [
+  "leetcode",
+  "codeforces",
+  "codechef",
+  "github",
+  "hackerrank",
+  "atcoder",
+];
+
+const PLATFORM_LABEL: Record<PlatformId, string> = {
+  leetcode: "LeetCode",
+  codeforces: "Codeforces",
+  codechef: "CodeChef",
+  github: "GitHub",
+  hackerrank: "HackerRank",
+  atcoder: "AtCoder",
+};
 
 type Student = {
   id: string;
   name: string;
-
-  // your DB reality
   branch?: string;
   section?: string;
   year?: string;
 
-  // optional if you ever add later
-  dept?: string;
-
-  // performance
-  codesyncScore?: number; // 0-100
+  codesyncScore?: number; // displayScore
+  prevScore?: number | null;
   activeThisWeek?: boolean;
   lastActiveAt?: string | null;
-  prevScore?: number;
 
-  platforms?: {
-    leetcode?: number;
-    codeforces?: number;
-    codechef?: number;
-    github?: number;
-    hackerrank?: number;
-    atcoder?: number;
-  };
+  // NOTE: dashboard platforms are quick placeholders; drawer uses real stats route
+  platforms?: Partial<Record<PlatformId, number>>;
 
   email?: string | null;
   phone?: string | null;
@@ -54,9 +73,50 @@ type DashboardResponse = {
   lastSyncAt?: string | null;
 };
 
+type StudentStatsResponse = {
+  profile?: {
+    id?: string;
+    name?: string;
+    branch?: string | null;
+    section?: string | null;
+    year?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    updatedAt?: string | null;
+  } | null;
+
+  cpHandles?: Partial<Record<PlatformId, string | null>> | null;
+
+  cpScores?: {
+    displayScore?: number;
+    prevDisplayScore?: number | null;
+    updatedAt?: string | null;
+    breakdown?: any;
+  } | null;
+
+  platformStats?: Partial<Record<PlatformId, any | null>> | null;
+
+  // ✅ from backend (use this!)
+  platformNumbers?: Partial<Record<PlatformId, any | null>> | null;
+
+  // ✅ 0-100 each (use this!)
+  platformSignals?: Partial<Record<PlatformId, number>> | null;
+
+  // ✅ total+parts (use this for detailed score explanation)
+  platformWiseScores?: Partial<Record<PlatformId, { total: number; parts: Record<string, number> }>> | null;
+
+  platformSum?: number;
+  platformTotalScore?: number;
+  overallFromPlatforms?: number;
+};
+
+/* ----------------- STYLE ----------------- */
+
 const BG = "bg-[#050509]";
 const CARD =
   "rounded-2xl border border-slate-800/80 bg-slate-950/50 backdrop-blur-xl shadow-[0_0_0_1px_rgba(15,23,42,0.7)]";
+
+/* ----------------- UTILS ----------------- */
 
 function clamp(n: number, a = 0, b = 100) {
   return Math.max(a, Math.min(b, n));
@@ -83,12 +143,17 @@ function percentile(arr: number[], p: number) {
   );
   return a[idx];
 }
-
 function safeStr(x?: any) {
   return (x ?? "").toString();
 }
+function niceDate(x?: string | null) {
+  if (!x) return "—";
+  const d = new Date(x);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
 
-/** ✅ FIXED: no Array.from(reduce(...)) TS overload issues */
+/** CSV */
 function downloadCSV(filename: string, rows: Array<Record<string, any>>) {
   const colSet = new Set<string>();
   for (const r of rows) for (const k of Object.keys(r)) colSet.add(k);
@@ -113,6 +178,8 @@ function downloadCSV(filename: string, rows: Array<Record<string, any>>) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/* ----------------- UI COMPONENTS ----------------- */
 
 function GlowTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -235,7 +302,7 @@ function PlatformMini({ platforms }: { platforms?: Student["platforms"] }) {
     ["GH", platforms?.github ?? 0],
   ] as const;
 
-  const max = Math.max(1, ...items.map((x) => x[1]));
+  const max = Math.max(1, ...items.map((x) => x[1] ?? 0));
   return (
     <div className="flex items-center gap-2">
       {items.map(([k, v]) => (
@@ -244,7 +311,7 @@ function PlatformMini({ platforms }: { platforms?: Student["platforms"] }) {
           <span className="inline-block h-1.5 w-10 rounded-full bg-slate-800 overflow-hidden">
             <span
               className="block h-full bg-slate-200/70"
-              style={{ width: `${(v / max) * 100}%` }}
+              style={{ width: `${((v ?? 0) / max) * 100}%` }}
             />
           </span>
         </div>
@@ -253,8 +320,55 @@ function PlatformMini({ platforms }: { platforms?: Student["platforms"] }) {
   );
 }
 
+/** Chips from platformNumbers (backend normalized numbers) */
+function numberChips(platform: PlatformId, numbers: any | null) {
+  if (!numbers) return [];
+  const out: Array<{ k: string; v: string }> = [];
+
+  if (platform === "leetcode") {
+    if (numbers.solved != null) out.push({ k: "solved", v: String(numbers.solved) });
+    if (numbers.contestRating != null && numbers.contestRating > 0)
+      out.push({ k: "rating", v: String(numbers.contestRating) });
+    if (numbers.easy != null) out.push({ k: "easy", v: String(numbers.easy) });
+    if (numbers.medium != null) out.push({ k: "med", v: String(numbers.medium) });
+    if (numbers.hard != null) out.push({ k: "hard", v: String(numbers.hard) });
+  }
+
+  if (platform === "codeforces") {
+    if (numbers.rating != null && numbers.rating > 0) out.push({ k: "rating", v: String(numbers.rating) });
+    if (numbers.maxRating != null && numbers.maxRating > 0) out.push({ k: "max", v: String(numbers.maxRating) });
+    if (numbers.contests != null && numbers.contests > 0) out.push({ k: "contests", v: String(numbers.contests) });
+    if (numbers.rank) out.push({ k: "rank", v: String(numbers.rank) });
+  }
+
+  if (platform === "codechef") {
+    if (numbers.rating != null && numbers.rating > 0) out.push({ k: "rating", v: String(numbers.rating) });
+    if (numbers.stars != null && numbers.stars > 0) out.push({ k: "stars", v: `${numbers.stars}★` });
+  }
+
+  if (platform === "github") {
+    if (numbers.contributions != null) out.push({ k: "contrib", v: String(numbers.contributions) });
+    if (numbers.publicRepos != null) out.push({ k: "repos", v: String(numbers.publicRepos) });
+    if (numbers.followers != null) out.push({ k: "followers", v: String(numbers.followers) });
+  }
+
+  if (platform === "hackerrank") {
+    if (numbers.badges != null) out.push({ k: "badges", v: String(numbers.badges) });
+    if (numbers.stars != null) out.push({ k: "stars", v: `${numbers.stars}★` });
+  }
+
+  if (platform === "atcoder") {
+    if (numbers.rating != null && numbers.rating > 0) out.push({ k: "rating", v: String(numbers.rating) });
+    if (numbers.maxRating != null && numbers.maxRating > 0) out.push({ k: "max", v: String(numbers.maxRating) });
+  }
+
+  return out.slice(0, 6);
+}
+
 type SortKey = "name" | "branch" | "section" | "year" | "score" | "active";
 type SortDir = "asc" | "desc";
+
+/* ----------------- PAGE ----------------- */
 
 export default function InstructorDashboard() {
   const [loading, setLoading] = useState(true);
@@ -263,7 +377,7 @@ export default function InstructorDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
-  // filters (REAL)
+  // filters
   const [branch, setBranch] = useState<string>("all");
   const [section, setSection] = useState<string>("all");
   const [year, setYear] = useState<string>("all");
@@ -273,8 +387,10 @@ export default function InstructorDashboard() {
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  // drawer
+  // drawer + real details
   const [selected, setSelected] = useState<Student | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [selectedStats, setSelectedStats] = useState<StudentStatsResponse | null>(null);
 
   const fetchDashboard = async () => {
     setLoading(true);
@@ -287,7 +403,6 @@ export default function InstructorDashboard() {
           q: q.trim() ? q.trim() : undefined,
         },
       });
-
       const data: DashboardResponse = res.data;
       setStudents(data.students ?? []);
       setLastSyncAt(data.lastSyncAt ?? null);
@@ -312,16 +427,25 @@ export default function InstructorDashboard() {
     }
   };
 
+  /** ✅ open drawer + load real platform data */
+  const openStudent = async (s: Student) => {
+    setSelected(s);
+    setSelectedStats(null);
+    setStatsLoading(true);
+    try {
+      const res = await apiClient.get(`/instructor/student/${s.id}/stats`);
+      setSelectedStats((res.data ?? null) as StudentStatsResponse | null);
+    } catch {
+      setSelectedStats(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // if you want "search as you type" hitting backend, uncomment:
-  // useEffect(() => {
-  //   const t = setTimeout(() => fetchDashboard(), 300);
-  //   return () => clearTimeout(t);
-  // }, [branch, section, year, q]);
 
   const options = useMemo(() => {
     const branches = new Set<string>();
@@ -342,7 +466,6 @@ export default function InstructorDashboard() {
     };
   }, [students]);
 
-  // Frontend filtering still kept (for safety + instant UX)
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     return students.filter((x) => {
@@ -358,10 +481,7 @@ export default function InstructorDashboard() {
     });
   }, [students, branch, section, year, q]);
 
-  const scores = useMemo(
-    () => filtered.map((s) => clamp(s.codesyncScore ?? 0)),
-    [filtered]
-  );
+  const scores = useMemo(() => filtered.map((s) => clamp(s.codesyncScore ?? 0)), [filtered]);
 
   const kpis = useMemo(() => {
     const total = filtered.length;
@@ -376,8 +496,10 @@ export default function InstructorDashboard() {
 
     const deltaAvg =
       filtered.some((s) => typeof s.prevScore === "number")
-        ? filtered.reduce((a, s) => a + ((s.codesyncScore ?? 0) - (s.prevScore ?? (s.codesyncScore ?? 0))), 0) /
-          Math.max(1, total)
+        ? filtered.reduce(
+            (a, s) => a + ((s.codesyncScore ?? 0) - (s.prevScore ?? (s.codesyncScore ?? 0))),
+            0
+          ) / Math.max(1, total)
         : null;
 
     return { total, active, inactive, avg, med, p90, atRisk, deltaAvg };
@@ -423,35 +545,6 @@ export default function InstructorDashboard() {
     () => [...filtered].sort((a, b) => (a.codesyncScore ?? 0) - (b.codesyncScore ?? 0)).slice(0, 5),
     [filtered]
   );
-
-  const platformMix = useMemo(() => {
-    const platforms = ["leetcode", "codeforces", "codechef", "github", "hackerrank", "atcoder"] as const;
-    const total = filtered.length || 1;
-
-    const sums: Record<(typeof platforms)[number], number> = {
-      leetcode: 0,
-      codeforces: 0,
-      codechef: 0,
-      github: 0,
-      hackerrank: 0,
-      atcoder: 0,
-    };
-
-    filtered.forEach((s) => {
-      platforms.forEach((p) => {
-        sums[p] += s.platforms?.[p] ?? 0;
-      });
-    });
-
-    const maxSum = Math.max(1, ...platforms.map((p) => sums[p]));
-    return platforms
-      .map((p) => ({
-        platform: p,
-        value: (sums[p] / maxSum) * 100,
-        avg: sums[p] / total,
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [filtered]);
 
   const sortedRows = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
@@ -509,22 +602,60 @@ export default function InstructorDashboard() {
       };
     });
 
-    downloadCSV(
-      `codesync_instructor_students_${new Date().toISOString().slice(0, 10)}.csv`,
-      rows
-    );
+    downloadCSV(`codesync_instructor_students_${new Date().toISOString().slice(0, 10)}.csv`, rows);
   };
+
+  /* =========================
+     DRAWER: use backend stats
+     ========================= */
+
+  const drawerScore = useMemo(() => {
+    const s = selectedStats?.cpScores?.displayScore;
+    if (typeof s === "number" && Number.isFinite(s)) return clamp(s);
+    return clamp(selected?.codesyncScore ?? 0);
+  }, [selectedStats, selected]);
+
+  const drawerSignals = useMemo(() => {
+    const out: Record<PlatformId, number> = {
+      leetcode: 0,
+      codeforces: 0,
+      codechef: 0,
+      github: 0,
+      hackerrank: 0,
+      atcoder: 0,
+    };
+    PLATFORMS.forEach((p) => {
+      const v = selectedStats?.platformSignals?.[p];
+      out[p] = typeof v === "number" && Number.isFinite(v) ? clamp(v) : 0;
+    });
+    return out;
+  }, [selectedStats]);
+
+  const drawerPlatformTotals = useMemo(() => {
+    const out: Record<PlatformId, number> = {
+      leetcode: 0,
+      codeforces: 0,
+      codechef: 0,
+      github: 0,
+      hackerrank: 0,
+      atcoder: 0,
+    };
+    PLATFORMS.forEach((p) => {
+      const v = selectedStats?.platformWiseScores?.[p]?.total;
+      out[p] = typeof v === "number" && Number.isFinite(v) ? clamp(v) : 0;
+    });
+    return out;
+  }, [selectedStats]);
 
   return (
     <div className={`min-h-screen ${BG} text-slate-100`}>
-      {/* subtle background glow */}
+      {/* glow bg */}
       <div className="pointer-events-none fixed inset-0 opacity-70">
         <div className="absolute -top-24 left-1/2 h-72 w-[46rem] -translate-x-1/2 rounded-full bg-sky-500/10 blur-3xl" />
         <div className="absolute top-40 -left-24 h-72 w-72 rounded-full bg-fuchsia-500/10 blur-3xl" />
         <div className="absolute bottom-10 right-0 h-72 w-96 rounded-full bg-rose-500/10 blur-3xl" />
       </div>
 
-      {/* ✅ WIDER + less margins */}
       <div className="relative mx-auto max-w-[1600px] px-2 sm:px-4 lg:px-6 py-6">
         {/* Header */}
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -535,11 +666,7 @@ export default function InstructorDashboard() {
             />
             <div className="mt-2 text-xs text-slate-500">
               Last sync:{" "}
-              {lastSyncAt
-                ? new Date(lastSyncAt).toLocaleString()
-                : loading
-                ? "Loading…"
-                : "—"}
+              {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : loading ? "Loading…" : "—"}
             </div>
           </div>
 
@@ -574,16 +701,12 @@ export default function InstructorDashboard() {
           </div>
         </div>
 
-        {/* Filters (REAL) */}
+        {/* Filters */}
         <div className={`${CARD} p-4 mb-5`}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-                Filters
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                Branch / Section / Year — same as your onboarding DB fields.
-              </div>
+              <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">Filters</div>
+              <div className="mt-1 text-xs text-slate-500">Branch / Section / Year</div>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -637,58 +760,24 @@ export default function InstructorDashboard() {
           </div>
 
           <div className="mt-3 text-xs text-slate-500">
-            Showing <span className="text-slate-200">{filtered.length}</span> students (after filters).
+            Showing <span className="text-slate-200">{filtered.length}</span> students.
           </div>
         </div>
 
         {/* KPIs */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <StatCard
-            label="Students"
-            value={String(kpis.total)}
-            hint="Filtered cohort count"
-            icon={<RiTeamLine className="text-lg" />}
-            tone="sky"
-          />
-          <StatCard
-            label="Active (week)"
-            value={String(kpis.active)}
-            hint={`${Math.round(pct(kpis.active, kpis.total))}% active`}
-            icon={<RiPulseLine className="text-lg" />}
-            tone="emerald"
-          />
-          <StatCard
-            label="Inactive"
-            value={String(kpis.inactive)}
-            hint="Needs follow-up"
-            icon={<RiAlarmWarningLine className="text-lg" />}
-            tone="rose"
-          />
+          <StatCard label="Students" value={String(kpis.total)} hint="Filtered cohort count" icon={<RiTeamLine className="text-lg" />} tone="sky" />
+          <StatCard label="Active (week)" value={String(kpis.active)} hint={`${Math.round(pct(kpis.active, kpis.total))}% active`} icon={<RiPulseLine className="text-lg" />} tone="emerald" />
+          <StatCard label="Inactive" value={String(kpis.inactive)} hint="Needs follow-up" icon={<RiAlarmWarningLine className="text-lg" />} tone="rose" />
           <StatCard
             label="Average"
             value={`${fmt(kpis.avg)} / 100`}
-            hint={
-              kpis.deltaAvg === null
-                ? "Mean score"
-                : `Avg change: ${kpis.deltaAvg >= 0 ? "+" : ""}${kpis.deltaAvg.toFixed(1)}`
-            }
+            hint={kpis.deltaAvg === null ? "Mean score" : `Avg change: ${kpis.deltaAvg >= 0 ? "+" : ""}${kpis.deltaAvg.toFixed(1)}`}
             icon={<RiBarChart2Line className="text-lg" />}
             tone="fuchsia"
           />
-          <StatCard
-            label="Median"
-            value={`${fmt(kpis.med)} / 100`}
-            hint="Robust benchmark"
-            icon={<RiBarChart2Line className="text-lg" />}
-            tone="amber"
-          />
-          <StatCard
-            label="P90"
-            value={`${fmt(kpis.p90)} / 100`}
-            hint="Top 10% benchmark"
-            icon={<RiTrophyLine className="text-lg" />}
-            tone="sky"
-          />
+          <StatCard label="Median" value={`${fmt(kpis.med)} / 100`} hint="Robust benchmark" icon={<RiBarChart2Line className="text-lg" />} tone="amber" />
+          <StatCard label="P90" value={`${fmt(kpis.p90)} / 100`} hint="Top 10% benchmark" icon={<RiTrophyLine className="text-lg" />} tone="sky" />
         </div>
 
         {/* Breakdown */}
@@ -697,16 +786,9 @@ export default function InstructorDashboard() {
             <div className="text-sm font-semibold text-slate-100">By Branch</div>
             <div className="mt-4 space-y-3">
               {byBranch.slice(0, 7).map((x) => (
-                <BarRow
-                  key={x.label}
-                  label={x.label}
-                  value={pct(x.count, kpis.total)}
-                  right={<span>{x.count}</span>}
-                />
+                <BarRow key={x.label} label={x.label} value={pct(x.count, kpis.total)} right={<span>{x.count}</span>} />
               ))}
-              {!byBranch.length && !loading ? (
-                <div className="text-sm text-slate-500">No data.</div>
-              ) : null}
+              {!byBranch.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
             </div>
           </div>
 
@@ -721,9 +803,7 @@ export default function InstructorDashboard() {
                   right={<span>{x.count}</span>}
                 />
               ))}
-              {!bySection.length && !loading ? (
-                <div className="text-sm text-slate-500">No data.</div>
-              ) : null}
+              {!bySection.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
             </div>
           </div>
 
@@ -738,35 +818,24 @@ export default function InstructorDashboard() {
                   right={<span>{x.count}</span>}
                 />
               ))}
-              {!byYear.length && !loading ? (
-                <div className="text-sm text-slate-500">No data.</div>
-              ) : null}
+              {!byYear.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
             </div>
           </div>
         </div>
 
-        {/* Distribution + Platform Mix */}
+        {/* Distribution */}
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className={`${CARD} p-4`}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-semibold text-slate-100">
-                  Score distribution
-                </div>
-                <div className="text-xs text-slate-500">
-                  Cohort spread across score bands
-                </div>
+                <div className="text-sm font-semibold text-slate-100">Score distribution</div>
+                <div className="text-xs text-slate-500">Cohort spread across score bands</div>
               </div>
               <RiBarChart2Line className="text-slate-400" />
             </div>
             <div className="mt-4 space-y-3">
               {buckets.map((b) => (
-                <BarRow
-                  key={b.label}
-                  label={b.label}
-                  value={pct(b.count, kpis.total)}
-                  right={<span>{b.count}</span>}
-                />
+                <BarRow key={b.label} label={b.label} value={pct(b.count, kpis.total)} right={<span>{b.count}</span>} />
               ))}
             </div>
           </div>
@@ -774,27 +843,28 @@ export default function InstructorDashboard() {
           <div className={`${CARD} p-4`}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-semibold text-slate-100">
-                  Platform signal mix
-                </div>
+                <div className="text-sm font-semibold text-slate-100">Platform mix</div>
                 <div className="text-xs text-slate-500">
-                  Average relative contribution
+                  Uses dashboard payload (quick). Drawer shows real platform scores.
                 </div>
               </div>
               <RiFireLine className="text-slate-400" />
             </div>
+
+            {/* simple quick avg bars from dashboard (may be 0 if you don't store signals there) */}
             <div className="mt-4 space-y-3">
-              {platformMix.slice(0, 6).map((p) => (
-                <BarRow
-                  key={p.platform}
-                  label={p.platform}
-                  value={p.value}
-                  right={<span className="tabular-nums">{Math.round(p.avg)}</span>}
-                />
-              ))}
-              {!platformMix.length && !loading ? (
-                <div className="text-sm text-slate-500">No platform data.</div>
-              ) : null}
+              {PLATFORMS.map((p) => {
+                const avg =
+                  filtered.reduce((a, s) => a + (s.platforms?.[p] ?? 0), 0) / Math.max(1, filtered.length);
+                return (
+                  <BarRow
+                    key={p}
+                    label={PLATFORM_LABEL[p]}
+                    value={clamp(avg)}
+                    right={<span className="tabular-nums">{Math.round(avg)}</span>}
+                  />
+                );
+              })}
             </div>
           </div>
         </div>
@@ -804,12 +874,8 @@ export default function InstructorDashboard() {
           <div className={`${CARD} p-4`}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-semibold text-slate-100">
-                  Top performers
-                </div>
-                <div className="text-xs text-slate-500">
-                  Best scores in current filter
-                </div>
+                <div className="text-sm font-semibold text-slate-100">Top performers</div>
+                <div className="text-xs text-slate-500">Best scores in current filter</div>
               </div>
               <RiTrophyLine className="text-slate-300" />
             </div>
@@ -818,41 +884,31 @@ export default function InstructorDashboard() {
               {top5.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => setSelected(s)}
+                  onClick={() => openStudent(s)}
                   className="w-full text-left flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 hover:bg-slate-900/50 transition"
                   type="button"
                 >
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate text-slate-100">
-                      {s.name}
-                    </div>
+                    <div className="text-sm font-semibold truncate text-slate-100">{s.name}</div>
                     <div className="text-xs text-slate-500 truncate">
                       {s.branch ?? "—"} • Sec {s.section ?? "—"} • Year {s.year ?? "—"}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="text-sm font-semibold tabular-nums text-slate-100">
-                      {Math.round(s.codesyncScore ?? 0)}
-                    </div>
+                    <div className="text-sm font-semibold tabular-nums text-slate-100">{Math.round(s.codesyncScore ?? 0)}</div>
                     <RiArrowRightUpLine className="text-slate-400" />
                   </div>
                 </button>
               ))}
-              {!top5.length && !loading ? (
-                <div className="text-sm text-slate-500">No data.</div>
-              ) : null}
+              {!top5.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
             </div>
           </div>
 
           <div className={`${CARD} p-4`}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-semibold text-slate-100">
-                  At-risk list
-                </div>
-                <div className="text-xs text-slate-500">
-                  Low score / inactive students
-                </div>
+                <div className="text-sm font-semibold text-slate-100">At-risk list</div>
+                <div className="text-xs text-slate-500">Low score / inactive students</div>
               </div>
               <RiAlarmWarningLine className="text-rose-300" />
             </div>
@@ -861,29 +917,23 @@ export default function InstructorDashboard() {
               {risk5.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => setSelected(s)}
+                  onClick={() => openStudent(s)}
                   className="w-full text-left flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 hover:bg-slate-900/50 transition"
                   type="button"
                 >
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate text-slate-100">
-                      {s.name}
-                    </div>
+                    <div className="text-sm font-semibold truncate text-slate-100">{s.name}</div>
                     <div className="text-xs text-slate-500 truncate">
                       {s.activeThisWeek ? "Active" : "Inactive"} • {s.branch ?? "—"} • Year {s.year ?? "—"}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="text-sm font-semibold tabular-nums text-slate-100">
-                      {Math.round(s.codesyncScore ?? 0)}
-                    </div>
+                    <div className="text-sm font-semibold tabular-nums text-slate-100">{Math.round(s.codesyncScore ?? 0)}</div>
                     <RiArrowRightUpLine className="text-slate-400" />
                   </div>
                 </button>
               ))}
-              {!risk5.length && !loading ? (
-                <div className="text-sm text-slate-500">No data.</div>
-              ) : null}
+              {!risk5.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
             </div>
           </div>
         </div>
@@ -893,9 +943,7 @@ export default function InstructorDashboard() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-4 border-b border-slate-800">
             <div>
               <div className="text-sm font-semibold text-slate-100">Students</div>
-              <div className="text-xs text-slate-500">
-                Click a student to open quick view. Sort columns to spot patterns fast.
-              </div>
+              <div className="text-xs text-slate-500">Click a student to open quick view.</div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -933,42 +981,12 @@ export default function InstructorDashboard() {
             <table className="min-w-full">
               <thead className="bg-slate-950/60">
                 <tr className="text-left text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none"
-                    onClick={() => toggleSort("name")}
-                  >
-                    Student
-                  </th>
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none"
-                    onClick={() => toggleSort("branch")}
-                  >
-                    Branch
-                  </th>
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none"
-                    onClick={() => toggleSort("section")}
-                  >
-                    Section
-                  </th>
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none"
-                    onClick={() => toggleSort("year")}
-                  >
-                    Year
-                  </th>
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none"
-                    onClick={() => toggleSort("score")}
-                  >
-                    Score
-                  </th>
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none"
-                    onClick={() => toggleSort("active")}
-                  >
-                    Status
-                  </th>
+                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("name")}>Student</th>
+                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("branch")}>Branch</th>
+                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("section")}>Section</th>
+                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("year")}>Year</th>
+                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("score")}>Score</th>
+                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("active")}>Status</th>
                   <th className="px-4 py-3">Platforms</th>
                 </tr>
               </thead>
@@ -976,16 +994,13 @@ export default function InstructorDashboard() {
               <tbody>
                 {sortedRows.map((s) => {
                   const score = clamp(s.codesyncScore ?? 0);
-                  const delta =
-                    typeof s.prevScore === "number"
-                      ? score - clamp(s.prevScore)
-                      : null;
+                  const delta = typeof s.prevScore === "number" ? score - clamp(s.prevScore) : null;
 
                   return (
                     <tr
                       key={s.id}
                       className="border-t border-slate-800/70 hover:bg-slate-900/40 transition cursor-pointer"
-                      onClick={() => setSelected(s)}
+                      onClick={() => openStudent(s)}
                     >
                       <td className="px-4 py-3">
                         <div className="font-semibold text-slate-100">{s.name}</div>
@@ -994,15 +1009,9 @@ export default function InstructorDashboard() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 text-sm text-slate-200">
-                        {s.branch ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-200">
-                        {s.section ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-200">
-                        {s.year ?? "—"}
-                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-200">{s.branch ?? "—"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-200">{s.section ?? "—"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-200">{s.year ?? "—"}</td>
 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -1012,18 +1021,11 @@ export default function InstructorDashboard() {
                               style={{ width: `${score}%` }}
                             />
                           </div>
-                          <div className="text-sm font-semibold tabular-nums text-slate-100">
-                            {Math.round(score)}
-                          </div>
+                          <div className="text-sm font-semibold tabular-nums text-slate-100">{Math.round(score)}</div>
                           {delta !== null ? (
-                            <span
-                              className={[
-                                "text-xs tabular-nums",
-                                delta >= 0 ? "text-emerald-300" : "text-rose-300",
-                              ].join(" ")}
-                            >
+                            <span className={["text-xs tabular-nums", delta >= 0 ? "text-emerald-300" : "text-rose-300"].join(" ")}>
                               {delta >= 0 ? "+" : ""}
-                              {delta}
+                              {Math.round(delta)}
                             </span>
                           ) : null}
                         </div>
@@ -1033,9 +1035,7 @@ export default function InstructorDashboard() {
                         <span
                           className={[
                             "inline-flex rounded-full border px-3 py-1 text-[0.7rem]",
-                            s.activeThisWeek
-                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                              : "border-slate-700 bg-slate-950/60 text-slate-300",
+                            s.activeThisWeek ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-slate-700 bg-slate-950/60 text-slate-300",
                           ].join(" ")}
                         >
                           {s.activeThisWeek ? "Active" : "Inactive"}
@@ -1063,14 +1063,14 @@ export default function InstructorDashboard() {
 
         <div className={`mt-5 ${CARD} p-4`}>
           <div className="text-xs text-slate-400">
-            Real data tips: ensure each student doc has{" "}
-            <span className="text-slate-200">fullName, branch, section, yearOfStudy</span>{" "}
-            and <span className="text-slate-200">cpScores.displayScore</span> so score + leaderboard + dashboard stay consistent.
+            ✅ Drawer uses backend fields:{" "}
+            <span className="text-slate-200">platformSignals / platformNumbers / platformWiseScores</span>{" "}
+            from <span className="text-slate-200">/instructor/student/:id/stats</span>.
           </div>
         </div>
       </div>
 
-      {/* Drawer (Student Quick View) */}
+      {/* Drawer */}
       <AnimatePresence>
         {selected ? (
           <>
@@ -1079,7 +1079,10 @@ export default function InstructorDashboard() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-              onClick={() => setSelected(null)}
+              onClick={() => {
+                setSelected(null);
+                setSelectedStats(null);
+              }}
             />
 
             <motion.aside
@@ -1087,20 +1090,24 @@ export default function InstructorDashboard() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 520, opacity: 0 }}
               transition={{ type: "spring", stiffness: 260, damping: 26 }}
-              className="fixed right-0 top-0 z-50 h-full w-full sm:w-[520px] border-l border-slate-800 bg-[#050509] p-4"
+              className="fixed right-0 top-0 z-50 h-full w-full sm:w-[560px] border-l border-slate-800 bg-[#050509] p-4 overflow-y-auto"
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-lg font-semibold text-slate-50">
-                    {selected.name}
+              {/* header */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-lg font-semibold text-slate-50 truncate">
+                    {selectedStats?.profile?.name ?? selected.name}
                   </div>
-                  <div className="text-sm text-slate-400">
-                    {selected.id} • {selected.branch ?? "—"} • Sec {selected.section ?? "—"} • Year{" "}
-                    {selected.year ?? "—"}
+                  <div className="text-sm text-slate-400 truncate">
+                    {selected.id} • {selected.branch ?? "—"} • Sec {selected.section ?? "—"} • Year {selected.year ?? "—"}
                   </div>
                 </div>
+
                 <button
-                  onClick={() => setSelected(null)}
+                  onClick={() => {
+                    setSelected(null);
+                    setSelectedStats(null);
+                  }}
                   className="h-9 w-9 rounded-full border border-slate-800 bg-slate-950/60 flex items-center justify-center hover:bg-slate-900/60 transition"
                   type="button"
                 >
@@ -1108,33 +1115,45 @@ export default function InstructorDashboard() {
                 </button>
               </div>
 
+              {/* mini strip */}
+              <div className={`mt-3 ${CARD} p-3`}>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-slate-200">
+                    <RiUser3Line /> {selectedStats?.profile?.name ?? selected.name}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-slate-300">
+                    <RiHashtag /> {selected.id}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-slate-300">
+                    <RiTimeLine /> {niceDate(selectedStats?.cpScores?.updatedAt ?? selectedStats?.profile?.updatedAt ?? selected.lastActiveAt)}
+                  </span>
+                </div>
+              </div>
+
+              {/* score + activity */}
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div className={`${CARD} p-3`}>
-                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-                    CodeSyncScore
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold text-slate-50">
-                    {Math.round(clamp(selected.codesyncScore ?? 0))}
-                  </div>
+                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">CodeSyncScore</div>
+                  <div className="mt-1 text-2xl font-semibold text-slate-50">{Math.round(drawerScore)}</div>
                   <div className="mt-2 h-2 rounded-full bg-slate-800/70 overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400"
-                      style={{ width: `${clamp(selected.codesyncScore ?? 0)}%` }}
+                      style={{ width: `${drawerScore}%` }}
                     />
                   </div>
 
-                  {typeof selected.prevScore === "number" ? (
+                  {typeof selectedStats?.cpScores?.prevDisplayScore === "number" ? (
                     <div className="mt-2 text-xs text-slate-400">
-                      Previous: {Math.round(selected.prevScore)} • Delta:{" "}
+                      Previous: {Math.round(selectedStats.cpScores.prevDisplayScore)} • Delta:{" "}
                       <span
                         className={
-                          (selected.codesyncScore ?? 0) - selected.prevScore >= 0
+                          drawerScore - clamp(selectedStats.cpScores.prevDisplayScore) >= 0
                             ? "text-emerald-300"
                             : "text-rose-300"
                         }
                       >
-                        {(selected.codesyncScore ?? 0) - selected.prevScore >= 0 ? "+" : ""}
-                        {Math.round((selected.codesyncScore ?? 0) - selected.prevScore)}
+                        {drawerScore - clamp(selectedStats.cpScores.prevDisplayScore) >= 0 ? "+" : ""}
+                        {Math.round(drawerScore - clamp(selectedStats.cpScores.prevDisplayScore))}
                       </span>
                     </div>
                   ) : (
@@ -1143,83 +1162,197 @@ export default function InstructorDashboard() {
                 </div>
 
                 <div className={`${CARD} p-3`}>
-                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-                    Activity
+                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">Cohort Signals</div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    Platform sum:{" "}
+                    <span className="text-slate-200 tabular-nums">
+                      {Math.round(selectedStats?.platformSum ?? 0)}
+                    </span>
                   </div>
-                  <div className="mt-2">
-                    <span
-                      className={[
-                        "inline-flex rounded-full border px-3 py-1 text-xs",
-                        selected.activeThisWeek
-                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                          : "border-slate-700 bg-slate-950/60 text-slate-300",
-                      ].join(" ")}
-                    >
-                      {selected.activeThisWeek ? "Active this week" : "Inactive this week"}
+                  <div className="mt-1 text-xs text-slate-500">
+                    Platform avg:{" "}
+                    <span className="text-slate-200 tabular-nums">
+                      {Math.round(selectedStats?.overallFromPlatforms ?? 0)}
                     </span>
                   </div>
                   <div className="mt-3 text-xs text-slate-500">
                     Last active:{" "}
-                    {selected.lastActiveAt ? new Date(selected.lastActiveAt).toLocaleString() : "—"}
+                    <span className="text-slate-200">{niceDate(selected.lastActiveAt)}</span>
                   </div>
                 </div>
               </div>
 
-              {(selected.email || selected.phone) ? (
+              {/* contact */}
+              {(selectedStats?.profile?.email || selectedStats?.profile?.phone || selected.email || selected.phone) ? (
                 <div className={`mt-3 ${CARD} p-3`}>
-                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-                    Contact
-                  </div>
+                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">Contact</div>
                   <div className="mt-2 space-y-2 text-sm text-slate-200">
-                    {selected.email ? (
+                    {(selectedStats?.profile?.email ?? selected.email) ? (
                       <div className="flex items-center gap-2">
-                        <RiMailLine className="text-slate-400" /> {selected.email}
+                        <RiMailLine className="text-slate-400" /> {selectedStats?.profile?.email ?? selected.email}
                       </div>
                     ) : null}
-                    {selected.phone ? (
+                    {(selectedStats?.profile?.phone ?? selected.phone) ? (
                       <div className="flex items-center gap-2">
-                        <RiPhoneLine className="text-slate-400" /> {selected.phone}
+                        <RiPhoneLine className="text-slate-400" /> {selectedStats?.profile?.phone ?? selected.phone}
                       </div>
                     ) : null}
                   </div>
                 </div>
               ) : null}
 
+              {/* platforms */}
               <div className="mt-4">
-                <div className="text-sm font-semibold text-slate-100">Platform signals</div>
-                <div className="mt-3 space-y-3">
-                  {(
-                    [
-                      ["LeetCode", selected.platforms?.leetcode ?? 0],
-                      ["Codeforces", selected.platforms?.codeforces ?? 0],
-                      ["CodeChef", selected.platforms?.codechef ?? 0],
-                      ["GitHub", selected.platforms?.github ?? 0],
-                      ["HackerRank", selected.platforms?.hackerrank ?? 0],
-                      ["AtCoder", selected.platforms?.atcoder ?? 0],
-                    ] as const
-                  ).map(([label, v]) => (
-                    <BarRow
-                      key={label}
-                      label={label}
-                      value={clamp(v)}
-                      right={<span className="tabular-nums">{Math.round(v)}</span>}
-                    />
-                  ))}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">Platform-wise scores (detailed)</div>
+                    <div className="text-xs text-slate-500">Uses backend: platformWiseScores + platformSignals + platformNumbers</div>
+                  </div>
+                  <RiFireLine className="text-slate-400" />
+                </div>
+
+                <div className="mt-3">
+                  {statsLoading ? (
+                    <div className={`${CARD} p-4 text-sm text-slate-400`}>Loading platform data…</div>
+                  ) : !selectedStats ? (
+                    <div className={`${CARD} p-4 text-sm text-slate-500`}>
+                      No platform stats found. (Check cpProfiles subcollection + stats route.)
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {PLATFORMS.map((pid) => {
+                        const handle = selectedStats?.cpHandles?.[pid] ?? null;
+                        const numbers = selectedStats?.platformNumbers?.[pid] ?? null;
+                        const chips = numberChips(pid, numbers);
+
+                        const total = drawerPlatformTotals[pid];        // from platformWiseScores.total
+                        const signal = drawerSignals[pid];              // from platformSignals
+
+                        const parts = selectedStats?.platformWiseScores?.[pid]?.parts ?? null;
+                        const partEntries = parts ? Object.entries(parts).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)) : [];
+
+                        return (
+                          <div key={pid} className={`${CARD} p-3`}>
+                            {/* header row */}
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <div className="text-sm font-semibold text-slate-100">
+                                    {PLATFORM_LABEL[pid]}
+                                  </div>
+                                  {handle ? (
+                                    <span className="text-[0.72rem] text-slate-400 truncate">@{handle}</span>
+                                  ) : (
+                                    <span className="text-[0.72rem] text-slate-500">no username</span>
+                                  )}
+                                </div>
+
+                                {chips.length ? (
+                                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                    {chips.map((c) => (
+                                      <span
+                                        key={`${pid}-${c.k}`}
+                                        className="rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-slate-200"
+                                      >
+                                        {c.k} {c.v}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 text-xs text-slate-500">
+                                    {numbers ? "stats present" : "missing platformNumbers"}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="text-right">
+                                <div className="text-[0.7rem] text-slate-500">total / signal</div>
+                                <div className="text-sm font-semibold text-slate-100 tabular-nums">
+                                  {Math.round(total)}{" "}
+                                  <span className="text-slate-500">·</span>{" "}
+                                  {Math.round(signal)}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* total bar */}
+                            <div className="mt-3">
+                              <div className="flex items-center justify-between text-[0.7rem] text-slate-500">
+                                <span>Platform total</span>
+                                <span className="tabular-nums">{Math.round(total)}/100</span>
+                              </div>
+                              <div className="mt-1 h-2 rounded-full bg-slate-800/60 overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400"
+                                  style={{ width: `${clamp(total)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* parts breakdown */}
+                            {partEntries.length ? (
+                              <div className="mt-3 space-y-2">
+                                <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
+                                  Score parts
+                                </div>
+
+                                {partEntries.slice(0, 5).map(([k, v]) => (
+                                  <div key={`${pid}-part-${k}`} className="flex items-center justify-between">
+                                    <div className="text-xs text-slate-300">{k}</div>
+                                    <div className="text-xs text-slate-300 tabular-nums">{Math.round(v)}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-3 text-xs text-slate-500">
+                                No breakdown parts returned (platformWiseScores.parts missing).
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
+              {/* handles panel */}
+              {selectedStats?.cpHandles ? (
+                <div className={`mt-3 ${CARD} p-3`}>
+                  <div className="flex items-center justify-between">
+                    <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
+                      Linked handles
+                    </div>
+                    <RiLinksLine className="text-slate-500" />
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    {PLATFORMS.map((p) => (
+                      <div key={p} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
+                        <div className="text-slate-500 capitalize">{p}</div>
+                        <div className="mt-0.5 text-slate-200 truncate">
+                          {selectedStats.cpHandles?.[p] ? `@${selectedStats.cpHandles[p]}` : "—"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* footer buttons */}
               <div className="mt-5 flex items-center gap-2">
                 <button
                   className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-slate-800 bg-slate-950/60 px-4 py-2 text-sm hover:bg-slate-900/60 transition"
                   type="button"
-                  onClick={() => (window.location.href = `/student/${selected.id}`)}
+                  onClick={() => window.location.assign(`/student/${selected.id}`)}
                 >
                   Open profile <RiArrowRightUpLine />
                 </button>
+
                 <button
                   className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-800 bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400 px-4 py-2 text-sm font-semibold text-black hover:brightness-110 transition"
                   type="button"
-                  onClick={() => alert("Next: add messaging / notes for instructor.")}
+                  onClick={() => alert("Next: add instructor notes / messaging.")}
                 >
                   Quick Action
                 </button>
