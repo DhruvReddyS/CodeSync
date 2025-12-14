@@ -1,6 +1,6 @@
 // backend/src/server.ts
 import dotenv from "dotenv";
-dotenv.config(); // ✅ load .env FIRST
+dotenv.config(); // ✅ load .env FIRST (Render also injects env vars)
 
 import express from "express";
 import cors from "cors";
@@ -21,20 +21,40 @@ import { firestore, FieldValue } from "./config/firebase";
 const app = express();
 
 /* --------------------------------------------------
- * MIDDLEWARE
+ * CORS (Render + Local)
  * -------------------------------------------------- */
+const FRONTEND_URL = (process.env.FRONTEND_URL || "").trim(); // e.g. https://codesync-web.onrender.com
+
+const allowedOrigins = new Set<string>([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+]);
+
+if (FRONTEND_URL) allowedOrigins.add(FRONTEND_URL);
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: (origin, cb) => {
+      // allow server-to-server / curl / postman (no origin)
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.has(origin)) return cb(null, true);
+      return cb(new Error(`CORS blocked origin: ${origin}`));
+    },
     credentials: true,
   })
 );
 
-// ATS payloads can get big (resume text + JD)
+/* --------------------------------------------------
+ * BODY LIMITS
+ * -------------------------------------------------- */
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-// Request logger
+/* --------------------------------------------------
+ * REQUEST LOGGER
+ * -------------------------------------------------- */
 app.use((req, _res, next) => {
   console.log(`[${req.method}] ${req.originalUrl}`);
   next();
@@ -47,48 +67,49 @@ app.use("/api/auth", authRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/instructor", instructorRoutes);
 
-// ✅ CAREER SUITE ROUTES
+// Career suite
 app.use("/api/career", careerRoutes);
 
-// CodePad
+// CodePad + contests
 app.use("/api", codepadRoutes);
-
-// Contests
 app.use("/api", contestsRouter);
 
-// CS.ai
+// AI
 app.use("/api/ai", aiRoutes);
 
 // Health
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
+    env: {
+      hasFrontendUrl: !!FRONTEND_URL,
+      nodeEnv: process.env.NODE_ENV || "unknown",
+    },
     hint: {
       ats: "POST /api/career/ats-analyzer",
-      pingCareer: "GET /api/career/ping (if enabled in career.routes.ts)",
+      studentStats: "GET /api/student/stats/me",
     },
   });
 });
 
 /* --------------------------------------------------
- * Ensure default instructor user always exists
+ * Ensure default instructor user exists (ONE-TIME)
  * -------------------------------------------------- */
 async function ensureDefaultInstructor() {
   const usersCol = firestore.collection("users");
   const instructorsCol = firestore.collection("instructors");
 
-  const email = "instructor@gmail.com";
-  const password = "instructor@1234";
-  const name = "Default Instructor";
+  const email = (process.env.DEFAULT_INSTRUCTOR_EMAIL || "instructor@gmail.com").trim();
+  const password = process.env.DEFAULT_INSTRUCTOR_PASSWORD || "instructor@1234";
+  const name = (process.env.DEFAULT_INSTRUCTOR_NAME || "Default Instructor").trim();
 
   try {
     const snap = await usersCol.where("email", "==", email).limit(1).get();
 
-    let userRef;
     let userId: string;
 
     if (snap.empty) {
-      userRef = usersCol.doc();
+      const userRef = usersCol.doc();
       userId = userRef.id;
 
       await userRef.set({
@@ -100,13 +121,13 @@ async function ensureDefaultInstructor() {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      console.log("⚙️ Created new default instructor user document.");
+      console.log("✅ Created default instructor user document.");
     } else {
       const doc = snap.docs[0];
-      userRef = doc.ref;
       userId = doc.id;
 
-      await userRef.set(
+      // ensure role + name only (DO NOT touch password here)
+      await doc.ref.set(
         {
           email,
           name: doc.data().name || name,
@@ -116,47 +137,40 @@ async function ensureDefaultInstructor() {
         { merge: true }
       );
 
-      console.log("⚙️ Ensured existing user is marked as instructor.");
+      console.log("✅ Default instructor user exists (role ensured).");
     }
 
     const instructorRef = instructorsCol.doc(userId);
     const instructorSnap = await instructorRef.get();
 
-    const passwordHash = await bcrypt.hash(password, 10);
-
+    // 🔥 IMPORTANT: only set password if instructor doc does NOT exist
     if (!instructorSnap.exists) {
+      const passwordHash = await bcrypt.hash(password, 10);
+
       await instructorRef.set({
         userId,
         passwordHash,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
-      console.log("⚙️ Created instructor document with default password.");
-    } else {
-      await instructorRef.set(
-        {
-          passwordHash,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-      console.log("⚙️ Updated instructor passwordHash for default instructor.");
-    }
 
-    console.log("✅ Default instructor ensured:");
-    console.log(`   Email: ${email}`);
-    console.log(`   Password: ${password}`);
+      console.log("✅ Created instructor login (password set once).");
+      console.log(`   Email: ${email}`);
+      console.log(`   Password: ${password}`);
+    } else {
+      console.log("✅ Instructor login already exists (password untouched).");
+    }
   } catch (err) {
-    console.error("❌ Error while ensuring default instructor:", err);
+    console.error("❌ Error ensuring default instructor:", err);
   }
 }
 
 /* --------------------------------------------------
- * START SERVER
+ * START SERVER (Render needs 0.0.0.0)
  * -------------------------------------------------- */
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT || 5000);
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server listening on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
   ensureDefaultInstructor();
 });
