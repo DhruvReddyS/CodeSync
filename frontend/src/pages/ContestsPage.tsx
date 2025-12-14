@@ -31,7 +31,7 @@ import {
 
 /* ----------------- ✅ API BASE (NO LOCALHOST HARDCODE) ----------------- */
 const API_BASE =
-  (import.meta.env.VITE_API_URL || "").trim() || "http://localhost:5000";
+  (import.meta.env.VITE_API_BASE_URL || "").trim() || "http://localhost:5000";
 
 /* ----------------- DATE LOCALIZER ----------------- */
 
