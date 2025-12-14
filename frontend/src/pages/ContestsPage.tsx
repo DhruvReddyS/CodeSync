@@ -440,7 +440,7 @@ const ContestsPage: React.FC = () => {
   useEffect(() => {
     const fetchContests = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/contests`);
+        const response = await fetch(`${API_BASE}/contests`);
         if (!response.ok)
           throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
         const data = await response.json();
