@@ -29,6 +29,10 @@ import {
   RiSparkling2Line,
 } from "react-icons/ri";
 
+/* ----------------- ✅ API BASE (NO LOCALHOST HARDCODE) ----------------- */
+const API_BASE =
+  (import.meta.env.VITE_API_URL || "").trim() || "http://localhost:5000";
+
 /* ----------------- DATE LOCALIZER ----------------- */
 
 const locales = { "en-US": enUS };
@@ -36,7 +40,7 @@ const locales = { "en-US": enUS };
 const localizer = dateFnsLocalizer({
   format,
   parse,
-  startOfWeek,
+  startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 0 }),
   getDay,
   locales,
 });
@@ -80,22 +84,19 @@ type CalendarEvent = {
   };
 };
 
-/* ----------------- PLATFORM COLORS (MATCH LANDING PAGE) ----------------- */
-/**
- * Matches your LandingPage PLATFORMS array:
- * violet-300, sky-300, orange-300, slate-100, emerald-300, amber-300, cyan-300, blue-300, pink-300
- */
+/* ----------------- PLATFORM COLORS ----------------- */
+
 const PLATFORM_COLORS: Record<string, string> = {
-  leetcode: "#C4B5FD", // violet-300
-  codeforces: "#7DD3FC", // sky-300
-  codechef: "#FDBA74", // orange-300
-  github: "#F1F5F9", // slate-100
-  geeksforgeeks: "#6EE7B7", // emerald-300
-  gfg: "#6EE7B7", // emerald-300
-  hackerrank: "#FCD34D", // amber-300
-  atcoder: "#67E8F9", // cyan-300
-  hackerearth: "#93C5FD", // blue-300
-  code360: "#F9A8D4", // pink-300
+  leetcode: "#C4B5FD",
+  codeforces: "#7DD3FC",
+  codechef: "#FDBA74",
+  github: "#F1F5F9",
+  geeksforgeeks: "#6EE7B7",
+  gfg: "#6EE7B7",
+  hackerrank: "#FCD34D",
+  atcoder: "#67E8F9",
+  hackerearth: "#93C5FD",
+  code360: "#F9A8D4",
   "code 360": "#F9A8D4",
 };
 
@@ -139,19 +140,16 @@ function safeDate(d: Date) {
   return d instanceof Date && isValid(d) ? d : null;
 }
 
-/** Ensure end > start; if not, apply min duration */
 function clampEnd(start: Date, end: Date, minMinutes = 20) {
   const s = safeDate(start);
   const e = safeDate(end);
   if (!s) return null;
   if (!e) return { start: s, end: addMinutes(s, minMinutes) };
-  if (e.getTime() <= s.getTime()) return { start: s, end: addMinutes(s, minMinutes) };
+  if (e.getTime() <= s.getTime())
+    return { start: s, end: addMinutes(s, minMinutes) };
   return { start: s, end: e };
 }
 
-/**
- * Code360 date example: "DD/MM/YYYY, HH:MM:SS AM"
- */
 function parseCode360Date(dateStr: string): Date {
   if (!dateStr) return new Date("invalid");
   try {
@@ -183,12 +181,13 @@ function parseStandardDate(dateInput: string | number): Date {
   return new Date("invalid");
 }
 
-/** Dedupe by platform + title + start */
 function dedupeEvents(events: CalendarEvent[]) {
   const seen = new Set<string>();
   const out: CalendarEvent[] = [];
   for (const e of events) {
-    const k = `${platformKey(e.platform)}|${e.title.trim().toLowerCase()}|${e.start.toISOString()}`;
+    const k = `${platformKey(e.platform)}|${e.title
+      .trim()
+      .toLowerCase()}|${e.start.toISOString()}`;
     if (seen.has(k)) continue;
     seen.add(k);
     out.push(e);
@@ -202,16 +201,11 @@ function shortTitle(t: string, max = 30) {
   return s.slice(0, max - 1).trimEnd() + "…";
 }
 
-/**
- * ✅ Proper mapping across views:
- * - MONTH: shorten end for clean cells
- * - WEEK/DAY/AGENDA: keep real timing (true duration)
- */
 function toDisplayEventForView(e: CalendarEvent, view: View): CalendarEvent {
   if (view === Views.MONTH) {
-    return { ...e, end: addMinutes(e.start, 18) }; // short “chip”
+    return { ...e, end: addMinutes(e.start, 18) };
   }
-  return e; // real end
+  return e;
 }
 
 /* ----------------- CUSTOM CALENDAR THEME ----------------- */
@@ -230,8 +224,6 @@ const calendarStyles = `
     rgba(2,6,23,0.88);
   box-shadow: 0 0 35px rgba(15,23,42,0.85);
 }
-
-/* toolbar */
 .codesync-calendar .rbc-toolbar{
   padding: 12px;
   margin-bottom: 0;
@@ -265,8 +257,6 @@ const calendarStyles = `
   border-color: rgba(226,232,240,0.0);
   box-shadow: 0 0 22px rgba(196,181,253,0.35);
 }
-
-/* headers */
 .codesync-calendar .rbc-header{
   background: rgba(2,6,23,0.55);
   border-bottom: 1px solid rgba(51,65,85,0.75);
@@ -275,8 +265,6 @@ const calendarStyles = `
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
-
-/* days */
 .codesync-calendar .rbc-day-bg{
   background: rgba(2,6,23,0.86);
   border-right: 1px solid rgba(15,23,42,0.95);
@@ -287,8 +275,6 @@ const calendarStyles = `
   box-shadow: inset 0 0 0 1px rgba(125,211,252,0.28);
 }
 .codesync-calendar .rbc-date-cell{ color: rgba(226,232,240,0.92); font-size: 12px; }
-
-/* base event reset */
 .codesync-calendar .rbc-event {
   background: transparent !important;
   border: none !important;
@@ -298,13 +284,12 @@ const calendarStyles = `
 .codesync-calendar .rbc-event:focus,
 .codesync-calendar .rbc-event:active { outline: none !important; }
 
-/* ---- SMALLER EVENT CHIP (reduced size) ---- */
 .cs-event-chip{
   position: relative;
   display: block;
   border-radius: 12px;
-  padding: 1px 6px;            /* smaller */
-  min-height: 14px;            /* smaller */
+  padding: 1px 6px;
+  min-height: 14px;
   cursor: pointer;
   user-select: none;
   transition: transform 140ms ease-out, filter 140ms ease-out, box-shadow 140ms ease-out;
@@ -328,7 +313,7 @@ const calendarStyles = `
 }
 .cs-event-title{
   min-width:0;
-  font-size:10px;              /* smaller */
+  font-size:10px;
   font-weight:850;
   line-height:1.05;
   white-space:nowrap;
@@ -336,8 +321,6 @@ const calendarStyles = `
   text-overflow:ellipsis;
   color: rgba(2,6,23,0.96);
 }
-
-/* Tooltip */
 .cs-event-tip{
   pointer-events: none;
   position: absolute;
@@ -365,7 +348,6 @@ const calendarStyles = `
 .cs-pill{ display:inline-flex; align-items:center; gap:6px; padding:5px 9px; border-radius:999px; border:1px solid rgba(51,65,85,0.70); background: rgba(15,23,42,0.55); }
 .cs-dot{ width:8px; height:8px; border-radius:999px; }
 
-/* Center modal */
 .cs-modal-overlay{
   position: fixed; inset: 0; z-index: 80;
   background: rgba(0,0,0,0.55);
@@ -405,7 +387,10 @@ function EventChip({ event }: EventProps<CalendarEvent>) {
   const chipBg = `linear-gradient(135deg, ${base} 0%, rgba(255,255,255,0.92) 220%)`;
 
   const realEnd = event.meta?.realEnd ?? event.end;
-  const timeText = `${format(event.start, "MMM d, h:mm a")} → ${format(realEnd, "MMM d, h:mm a")}`;
+  const timeText = `${format(event.start, "MMM d, h:mm a")} → ${format(
+    realEnd,
+    "MMM d, h:mm a"
+  )}`;
 
   const tag = platformKey(event.platform).slice(0, 2).toUpperCase();
 
@@ -451,15 +436,15 @@ const ContestsPage: React.FC = () => {
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const [copied, setCopied] = useState(false);
 
-  /* ----------------- FETCH + MAP (ALL SECTIONS) ----------------- */
+  /* ----------------- FETCH + MAP (✅ FIXED) ----------------- */
   useEffect(() => {
     const fetchContests = async () => {
       try {
-        const response = await fetch("http://localhost:5000/api/contests");
-        if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+        const response = await fetch(`${API_BASE}/api/contests`);
+        if (!response.ok)
+          throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
         const data = await response.json();
 
-        // Codolio: includes multi-platform contests (LeetCode/CF/CC/AtCoder/HE/GFG etc.)
         const codolio: CalendarEvent[] = (data.data || [])
           .map((c: CodolioContest) => {
             const startRaw = new Date(c.contestStartDate);
@@ -476,12 +461,15 @@ const ContestsPage: React.FC = () => {
               end: fixed.end,
               platform: pl,
               url: c.contestUrl,
-              meta: { realEnd: fixed.end, durationMin: dur, platformKey: platformKey(pl) },
+              meta: {
+                realEnd: fixed.end,
+                durationMin: dur,
+                platformKey: platformKey(pl),
+              },
             } as CalendarEvent;
           })
           .filter(Boolean) as CalendarEvent[];
 
-        // HackerRank endpoint
         const hackerrank: CalendarEvent[] = (data.hackerrank || [])
           .map((c: HackerRankContest) => {
             const startRaw = parseStandardDate(c.start_time);
@@ -498,12 +486,15 @@ const ContestsPage: React.FC = () => {
               end: fixed.end,
               platform: pl,
               url: c.microsite_url,
-              meta: { realEnd: fixed.end, durationMin: dur, platformKey: platformKey(pl) },
+              meta: {
+                realEnd: fixed.end,
+                durationMin: dur,
+                platformKey: platformKey(pl),
+              },
             } as CalendarEvent;
           })
           .filter(Boolean) as CalendarEvent[];
 
-        // Code360 endpoint
         const code360: CalendarEvent[] = (data.code360 || [])
           .map((c: Code360Contest) => {
             const startRaw = parseCode360Date(c.start_time);
@@ -520,7 +511,11 @@ const ContestsPage: React.FC = () => {
               end: fixed.end,
               platform: pl,
               url: c.url,
-              meta: { realEnd: fixed.end, durationMin: dur, platformKey: platformKey(pl) },
+              meta: {
+                realEnd: fixed.end,
+                durationMin: dur,
+                platformKey: platformKey(pl),
+              },
             } as CalendarEvent;
           })
           .filter(Boolean) as CalendarEvent[];
@@ -608,13 +603,14 @@ const ContestsPage: React.FC = () => {
     } catch {}
   };
 
-  /* ----------------- UI STATES ----------------- */
   if (loading) {
     return (
       <div className="min-h-[calc(100vh-4rem)] w-full bg-[#050509] text-slate-100 flex items-center justify-center p-6">
         <div className="rounded-3xl border border-slate-800 bg-black/70 backdrop-blur-xl px-6 py-4 flex items-center gap-3 shadow-[0_0_40px_rgba(15,23,42,0.9)]">
           <div className="h-3 w-3 rounded-full bg-sky-300 animate-ping" />
-          <p className="text-sm text-slate-300">Fetching live contests across platforms…</p>
+          <p className="text-sm text-slate-300">
+            Fetching live contests across platforms…
+          </p>
         </div>
       </div>
     );
@@ -625,12 +621,14 @@ const ContestsPage: React.FC = () => {
       <div className="min-h-[calc(100vh-4rem)] w-full bg-[#050509] text-slate-100 flex items-center justify-center p-6">
         <div className="rounded-3xl border border-rose-700/70 bg-black/70 backdrop-blur-xl px-6 py-4 shadow-[0_0_40px_rgba(127,29,29,0.35)]">
           <p className="text-sm text-rose-300">Error while loading contests: {error}</p>
+          <p className="mt-2 text-xs text-slate-400">
+            API_BASE: <span className="text-slate-200">{API_BASE}</span>
+          </p>
         </div>
       </div>
     );
   }
 
-  /* ----------------- MODAL DATA (REAL TIMINGS ALWAYS) ----------------- */
   const modalPlatform = activeEvent?.platform || "";
   const modalColor = getColorForPlatform(modalPlatform);
   const modalStart = activeEvent?.start;
@@ -645,13 +643,11 @@ const ContestsPage: React.FC = () => {
     <div className="min-h-[calc(100vh-4rem)] w-full bg-[#050509] text-slate-100 p-6 sm:p-10 relative overflow-hidden text-[13px] sm:text-[14px]">
       <style dangerouslySetInnerHTML={{ __html: calendarStyles }} />
 
-      {/* glows */}
       <div className="pointer-events-none absolute inset-0 opacity-60">
         <div className="absolute right-[-10%] top-[-15%] h-80 w-80 rounded-full bg-sky-500/25 blur-[120px]" />
         <div className="absolute left-[-10%] bottom-[-20%] h-80 w-80 rounded-full bg-fuchsia-500/25 blur-[120px]" />
       </div>
 
-      {/* header */}
       <div className="relative mb-8 sm:mb-10 flex flex-col items-center text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-black/70 px-4 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-300">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -666,11 +662,11 @@ const ContestsPage: React.FC = () => {
         </h1>
 
         <p className="mt-2 text-[13px] sm:text-sm text-slate-400 max-w-2xl mx-auto">
-          Month view stays clean. Week/Day show real timings. Click any contest for details.
+          Month view stays clean. Week/Day show real timings. Click any contest for
+          details.
         </p>
       </div>
 
-      {/* controls */}
       <div className="relative w-full max-w-6xl mx-auto mb-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         <div className="rounded-2xl border border-slate-800 bg-black/60 backdrop-blur-xl px-4 py-3 shadow-[0_0_30px_rgba(15,23,42,0.85)]">
           <div className="flex items-center gap-3">
@@ -678,7 +674,9 @@ const ContestsPage: React.FC = () => {
               <RiCalendarEventLine className="text-xl" />
             </div>
             <div className="text-left">
-              <p className="text-[11px] font-semibold text-slate-100">Live contest aggregation</p>
+              <p className="text-[11px] font-semibold text-slate-100">
+                Live contest aggregation
+              </p>
               <p className="text-[10px] text-slate-500">
                 {allEvents.length} events • Month / Week / Day / Agenda
               </p>
@@ -706,7 +704,6 @@ const ContestsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* calendar */}
       <div className="relative w-full max-w-6xl mx-auto rounded-3xl border border-slate-800 bg-black/60 backdrop-blur-xl shadow-[0_0_40px_rgba(15,23,42,0.9)] overflow-hidden">
         <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-slate-800/80 bg-gradient-to-r from-black via-[#050815] to-black">
           <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-slate-500">
@@ -737,7 +734,6 @@ const ContestsPage: React.FC = () => {
             />
           </div>
 
-          {/* legend = exact landing palette */}
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-400">
             <span className="text-slate-500">Legend:</span>
             <LegendDot label="LeetCode" color={PLATFORM_COLORS.leetcode} />
@@ -751,7 +747,6 @@ const ContestsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* modal */}
       <div
         className={`cs-modal-overlay ${modalOpen ? "open" : ""}`}
         onClick={closeModal}
@@ -764,7 +759,10 @@ const ContestsPage: React.FC = () => {
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-black/40 px-3 py-1 text-[11px] text-slate-200">
                   <span
                     className="h-2 w-2 rounded-full"
-                    style={{ background: modalColor, boxShadow: `0 0 18px ${modalColor}55` }}
+                    style={{
+                      background: modalColor,
+                      boxShadow: `0 0 18px ${modalColor}55`,
+                    }}
                   />
                   {modalPlatform || "Contest"}
                 </span>
@@ -829,7 +827,8 @@ const ContestsPage: React.FC = () => {
               onClick={copyLink}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-black/35 px-4 py-2 text-[13px] font-semibold text-slate-200 hover:border-sky-300/60 active:scale-95 transition"
             >
-              {copied ? "Copied" : "Copy link"} <RiFileCopy2Line className="text-base" />
+              {copied ? "Copied" : "Copy link"}{" "}
+              <RiFileCopy2Line className="text-base" />
             </button>
           </div>
         </div>
