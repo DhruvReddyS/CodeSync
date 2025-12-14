@@ -1,9 +1,8 @@
-// frontend/src/lib/apiClient.ts
 import axios, { InternalAxiosRequestConfig, AxiosHeaders } from "axios";
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
-  withCredentials: true,
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
+  withCredentials: false, // ✅ IMPORTANT (Bearer token only, no cookies)
 });
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
