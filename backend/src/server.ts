@@ -5,6 +5,8 @@ dotenv.config(); // ✅ load env vars (Render injects automatically)
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
+import path from "path";
+import fs from "fs";
 
 // ROUTES
 import authRoutes from "./routes/auth.routes";
@@ -19,11 +21,12 @@ import contestsRouter from "./routes/contests.routes";
 import { firestore, FieldValue } from "./config/firebase";
 
 const app = express();
+app.disable("x-powered-by");
 
 /* ==================================================
  * ✅ CORS CONFIG (LOCAL + RENDER)
  * ================================================== */
-const FRONTEND_URL = (process.env.FRONTEND_URL || "").trim(); // https://codesync-mvsr.onrender.com
+const FRONTEND_URL = (process.env.FRONTEND_URL || "").trim(); // e.g. https://codesync-mvsr.onrender.com
 
 const allowedOrigins = new Set<string>([
   "http://localhost:5173",
@@ -32,15 +35,12 @@ const allowedOrigins = new Set<string>([
   "http://127.0.0.1:3000",
 ]);
 
-if (FRONTEND_URL) {
-  allowedOrigins.add(FRONTEND_URL);
-}
+if (FRONTEND_URL) allowedOrigins.add(FRONTEND_URL);
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      // allow Postman / server-to-server
-      if (!origin) return cb(null, true);
+      if (!origin) return cb(null, true); // Postman / server-to-server
       if (allowedOrigins.has(origin)) return cb(null, true);
       return cb(new Error(`❌ CORS blocked origin: ${origin}`));
     },
@@ -94,6 +94,40 @@ app.get("/api/health", (_req, res) => {
 });
 
 /* ==================================================
+ * ✅ SPA FALLBACK (Fix React Router refresh 404 on Render)
+ * - Works ONLY if you serve frontend build from this backend
+ * - If frontend is a separate Render Static Site, do rewrite there instead
+ * ================================================== */
+const clientDist =
+  process.env.CLIENT_DIST?.trim() ||
+  path.join(__dirname, "../../frontend/dist"); // adjust if your dist path differs
+
+if (fs.existsSync(clientDist)) {
+  console.log("🟢 Serving frontend from:", clientDist);
+
+  app.use(express.static(clientDist));
+
+  // IMPORTANT: keep this AFTER /api routes
+  app.get("*", (req, res) => {
+    if (req.path.startsWith("/api")) {
+      return res.status(404).json({ message: "API route not found" });
+    }
+    return res.sendFile(path.join(clientDist, "index.html"));
+  });
+} else {
+  console.log(
+    "🟡 Frontend dist not found. Skipping static hosting. (clientDist=",
+    clientDist,
+    ")"
+  );
+
+  // Optional: API-only 404 handler
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ message: "API route not found" });
+  });
+}
+
+/* ==================================================
  * ENSURE DEFAULT INSTRUCTOR (ONE-TIME SAFE)
  * ================================================== */
 async function ensureDefaultInstructor() {
@@ -130,10 +164,7 @@ async function ensureDefaultInstructor() {
       userId = doc.id;
 
       await doc.ref.set(
-        {
-          role: "instructor",
-          updatedAt: FieldValue.serverTimestamp(),
-        },
+        { role: "instructor", updatedAt: FieldValue.serverTimestamp() },
         { merge: true }
       );
 
@@ -164,6 +195,14 @@ async function ensureDefaultInstructor() {
     console.error("❌ Error ensuring default instructor:", err);
   }
 }
+
+/* ==================================================
+ * GLOBAL ERROR HANDLER (CORS + others)
+ * ================================================== */
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error("❌ Server error:", err?.message || err);
+  return res.status(500).json({ message: err?.message || "Internal server error" });
+});
 
 /* ==================================================
  * START SERVER (Render needs 0.0.0.0)
