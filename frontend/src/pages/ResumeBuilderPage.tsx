@@ -570,9 +570,12 @@ function GlowButton({
 }
 
 /* ---------------------------------------------
- * Templates (FIXED: tighter fonts + line height + spacing)
+ * Templates (tight)
  * Uses CSS vars injected on A4 stage:
  *  --accent, --fs-base, --fs-sm, --lh, --pad
+ *
+ * ✅ FIX: no tailwind `text-[var(--fs-base)]` / `leading-[var(--lh)]`
+ * -> use inline styles so tailwind-intellisense stops cssConflict warnings
  * --------------------------------------------*/
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -587,18 +590,29 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function P({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[var(--fs-base)] leading-[var(--lh)] text-black/85">
+    <div
+      className="text-black/85"
+      style={{
+        fontSize: "var(--fs-base)" as any,
+        lineHeight: "var(--lh)" as any,
+      }}
+    >
       {children}
     </div>
   );
 }
 
 function BulletList({ items }: { items: string[] }) {
-  // keep bullets tight + limit count to reduce overflow
   const list = (items || []).filter(Boolean).slice(0, 4);
   if (!list.length) return null;
   return (
-    <ul className="mt-1 list-disc pl-4 text-[var(--fs-base)] leading-[var(--lh)] text-black/85">
+    <ul
+      className="mt-1 list-disc pl-4 text-black/85"
+      style={{
+        fontSize: "var(--fs-base)" as any,
+        lineHeight: "var(--lh)" as any,
+      }}
+    >
       {list.map((b, i) => (
         <li key={i} className="my-[1px]">
           {b}
@@ -608,7 +622,7 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
-/* --------- TEMPLATE 1: NeoMinimal (tight) --------- */
+/* --------- TEMPLATE 1: NeoMinimal --------- */
 function NeoMinimal({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
   return (
     <div className="p-[var(--pad)]">
@@ -721,7 +735,13 @@ function NeoMinimal({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
           {anySkills(r) ? (
             <div className="rounded-2xl border border-black/10 bg-black/[0.02] p-3">
               <SectionLabel>Skills</SectionLabel>
-              <div className="mt-2 space-y-1.5 text-[var(--fs-base)] leading-[var(--lh)] text-black/80">
+              <div
+                className="mt-2 space-y-1.5 text-black/80"
+                style={{
+                  fontSize: "var(--fs-base)" as any,
+                  lineHeight: "var(--lh)" as any,
+                }}
+              >
                 {r.skills.languages.length ? (
                   <div>Languages: {r.skills.languages.join(", ")}</div>
                 ) : null}
@@ -768,7 +788,13 @@ function NeoMinimal({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
           {r.achievements.length ? (
             <div>
               <SectionLabel>Achievements</SectionLabel>
-              <ul className="mt-1 list-disc pl-4 text-[var(--fs-base)] leading-[var(--lh)] text-black/85">
+              <ul
+                className="mt-1 list-disc pl-4 text-black/85"
+                style={{
+                  fontSize: "var(--fs-base)" as any,
+                  lineHeight: "var(--lh)" as any,
+                }}
+              >
                 {r.achievements
                   .filter(Boolean)
                   .slice(0, 6)
@@ -784,7 +810,13 @@ function NeoMinimal({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
           {r.certifications.length ? (
             <div>
               <SectionLabel>Certifications</SectionLabel>
-              <ul className="mt-1 list-disc pl-4 text-[var(--fs-base)] leading-[var(--lh)] text-black/85">
+              <ul
+                className="mt-1 list-disc pl-4 text-black/85"
+                style={{
+                  fontSize: "var(--fs-base)" as any,
+                  lineHeight: "var(--lh)" as any,
+                }}
+              >
                 {r.certifications.slice(0, 5).map((c, i) => (
                   <li key={i} className="my-[1px]">
                     {c.name}
@@ -801,7 +833,7 @@ function NeoMinimal({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
   );
 }
 
-/* --------- TEMPLATE 2: TechCard (tight) --------- */
+/* --------- TEMPLATE 2: TechCard --------- */
 function TechCard({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
   return (
     <div className="p-[var(--pad)]">
@@ -899,7 +931,9 @@ function TechCard({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
                     <div className="text-[12px] font-bold text-black">
                       {p.name || "Project"}
                     </div>
-                    <div className="text-[10px] text-black/55">{p.tech || ""}</div>
+                    <div className="text-[10px] text-black/55">
+                      {p.tech || ""}
+                    </div>
                   </div>
                   {p.description ? <P>{p.description}</P> : null}
                   <BulletList items={p.bullets} />
@@ -918,7 +952,13 @@ function TechCard({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
           {anySkills(r) ? (
             <div className="rounded-3xl border border-black/10 bg-white p-4">
               <SectionLabel>Skills</SectionLabel>
-              <div className="mt-2 space-y-1.5 text-[var(--fs-base)] leading-[var(--lh)] text-black/80">
+              <div
+                className="mt-2 space-y-1.5 text-black/80"
+                style={{
+                  fontSize: "var(--fs-base)" as any,
+                  lineHeight: "var(--lh)" as any,
+                }}
+              >
                 {r.skills.languages.length ? (
                   <div>Languages: {r.skills.languages.join(", ")}</div>
                 ) : null}
@@ -961,7 +1001,13 @@ function TechCard({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
           {r.achievements.length ? (
             <div className="rounded-3xl border border-black/10 bg-black/[0.02] p-4">
               <SectionLabel>Achievements</SectionLabel>
-              <ul className="mt-1 list-disc pl-4 text-[var(--fs-base)] leading-[var(--lh)] text-black/85">
+              <ul
+                className="mt-1 list-disc pl-4 text-black/85"
+                style={{
+                  fontSize: "var(--fs-base)" as any,
+                  lineHeight: "var(--lh)" as any,
+                }}
+              >
                 {r.achievements
                   .filter(Boolean)
                   .slice(0, 6)
@@ -977,7 +1023,13 @@ function TechCard({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
           {r.certifications.length ? (
             <div className="rounded-3xl border border-black/10 bg-black/[0.02] p-4">
               <SectionLabel>Certifications</SectionLabel>
-              <ul className="mt-1 list-disc pl-4 text-[var(--fs-base)] leading-[var(--lh)] text-black/85">
+              <ul
+                className="mt-1 list-disc pl-4 text-black/85"
+                style={{
+                  fontSize: "var(--fs-base)" as any,
+                  lineHeight: "var(--lh)" as any,
+                }}
+              >
                 {r.certifications.slice(0, 5).map((c, i) => (
                   <li key={i} className="my-[1px]">
                     {c.name}
@@ -992,7 +1044,13 @@ function TechCard({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
           {r.extracurricular.length ? (
             <div className="rounded-3xl border border-black/10 bg-black/[0.02] p-4">
               <SectionLabel>Leadership / Extra</SectionLabel>
-              <ul className="mt-1 list-disc pl-4 text-[var(--fs-base)] leading-[var(--lh)] text-black/85">
+              <ul
+                className="mt-1 list-disc pl-4 text-black/85"
+                style={{
+                  fontSize: "var(--fs-base)" as any,
+                  lineHeight: "var(--lh)" as any,
+                }}
+              >
                 {r.extracurricular
                   .filter(Boolean)
                   .slice(0, 5)
@@ -1010,7 +1068,7 @@ function TechCard({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
   );
 }
 
-/* --------- TEMPLATE 3: SplitAccent (tight) --------- */
+/* --------- TEMPLATE 3: SplitAccent --------- */
 function SplitAccent({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
   return (
     <div className="grid min-h-full grid-cols-12">
@@ -1125,7 +1183,9 @@ function SplitAccent({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
                   <div className="flex items-baseline justify-between gap-2">
                     <div className="text-[12px] font-bold text-black">
                       {e.role || "Role"}{" "}
-                      <span className="text-black/55">— {e.company || "Company"}</span>
+                      <span className="text-black/55">
+                        — {e.company || "Company"}
+                      </span>
                     </div>
                     <div className="text-[10px] text-black/55">
                       {e.start || "Start"} – {e.end || "End"}
@@ -1153,7 +1213,9 @@ function SplitAccent({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
                     <div className="text-[12px] font-bold text-black">
                       {p.name || "Project"}
                     </div>
-                    <div className="text-[10px] text-black/55">{p.tech || ""}</div>
+                    <div className="text-[10px] text-black/55">
+                      {p.tech || ""}
+                    </div>
                   </div>
                   {p.description ? <P>{p.description}</P> : null}
                   <BulletList items={p.bullets} />
@@ -1198,7 +1260,13 @@ function SplitAccent({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
         {r.achievements.length ? (
           <div className="mt-5">
             <SectionLabel>Achievements</SectionLabel>
-            <ul className="mt-1 list-disc pl-4 text-[var(--fs-base)] leading-[var(--lh)] text-black/85">
+            <ul
+              className="mt-1 list-disc pl-4 text-black/85"
+              style={{
+                fontSize: "var(--fs-base)" as any,
+                lineHeight: "var(--lh)" as any,
+              }}
+            >
               {r.achievements
                 .filter(Boolean)
                 .slice(0, 6)
@@ -1215,9 +1283,8 @@ function SplitAccent({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
   );
 }
 
-/* --------- TEMPLATE 4: TimelinePro (tight) --------- */
+/* --------- TEMPLATE 4: TimelinePro --------- */
 function TimelinePro({ r, badges }: { r: ResumeForm; badges: SkillBadge[] }) {
-  // reuse TechCard for stability + fitting
   return <TechCard r={r} badges={badges} />;
 }
 
@@ -1404,7 +1471,14 @@ function ExperienceEditor({
               ...p,
               experience: [
                 ...p.experience,
-                { company: "", role: "", location: "", start: "", end: "", bullets: [] },
+                {
+                  company: "",
+                  role: "",
+                  location: "",
+                  start: "",
+                  end: "",
+                  bullets: [],
+                },
               ],
             }))
           }
@@ -1701,7 +1775,15 @@ function EducationEditor({
               ...p,
               education: [
                 ...p.education,
-                { school: "", degree: "", field: "", location: "", start: "", end: "", score: "" },
+                {
+                  school: "",
+                  degree: "",
+                  field: "",
+                  location: "",
+                  start: "",
+                  end: "",
+                  score: "",
+                },
               ],
             }))
           }
@@ -1806,7 +1888,10 @@ function CertificationsEditor({
           onClick={() =>
             setForm((p) => ({
               ...p,
-              certifications: [...p.certifications, { name: "", issuer: "", year: "", link: "" }],
+              certifications: [
+                ...p.certifications,
+                { name: "", issuer: "", year: "", link: "" },
+              ],
             }))
           }
         >
@@ -1871,14 +1956,12 @@ function SimpleListEditor({
 }
 
 /* ---------------------------------------------
- * Main Page (FIXED: true A4 stage + auto fit scale)
+ * Main Page
  * --------------------------------------------*/
 export default function ResumeBuilderPage() {
   const navigate = useNavigate();
 
-  // outer A4 canvas
   const previewOuterRef = useRef<HTMLDivElement | null>(null);
-  // inner content (measured)
   const previewInnerRef = useRef<HTMLDivElement | null>(null);
 
   const [template, setTemplate] = useState<TemplateId>("tech-card");
@@ -1887,24 +1970,19 @@ export default function ResumeBuilderPage() {
 
   const [skillBadges, setSkillBadges] = useState<SkillBadge[]>([]);
 
-  // Job tailoring inputs
   const [targetRole, setTargetRole] = useState("");
   const [jobDesc, setJobDesc] = useState("");
 
-  // Global status
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Per-item rewrite loading
   const [rewriteExpIdx, setRewriteExpIdx] = useState<number | null>(null);
   const [rewriteProjIdx, setRewriteProjIdx] = useState<number | null>(null);
 
-  // ⭐ auto-fit
   const [fitToPage, setFitToPage] = useState(true);
   const [fitScale, setFitScale] = useState(1);
 
-  // (Optional) restore last state (safe)
   useEffect(() => {
     try {
       const saved = localStorage.getItem("cs_resume_builder_form");
@@ -1942,7 +2020,7 @@ export default function ResumeBuilderPage() {
   }
 
   /* --------------------------
-   * AUTO FIT (prevents cutting in preview + export)
+   * AUTO FIT
    * -------------------------- */
   const recalcFit = () => {
     if (!fitToPage) {
@@ -1958,7 +2036,6 @@ export default function ResumeBuilderPage() {
     const scaleH = A4_H / contentH;
     const scaleW = A4_W / contentW;
 
-    // Never scale up. Clamp to avoid unreadable
     const s = Math.min(1, scaleH, scaleW);
     const clamped = Math.max(0.72, Math.min(1, s));
     setFitScale(clamped);
@@ -1992,18 +2069,14 @@ export default function ResumeBuilderPage() {
       const badges = data.badges || [];
       setSkillBadges(badges);
 
-      // merge suggested tools/concepts into skills chips
       setForm((p) => ({
         ...p,
         skills: {
           ...p.skills,
-          tools: uniq([
-            ...(p.skills.tools || []),
-            ...((data.suggestedTools || []) as string[]),
-          ]),
+          tools: uniq([...(p.skills.tools || []), ...(data.suggestedTools || [])]),
           concepts: uniq([
             ...(p.skills.concepts || []),
-            ...((data.suggestedConcepts || []) as string[]),
+            ...(data.suggestedConcepts || []),
           ]),
         },
       }));
@@ -2135,97 +2208,89 @@ export default function ResumeBuilderPage() {
   }
 
   async function downloadPDF() {
-  setErr(null);
+    setErr(null);
 
-  let stage: HTMLDivElement | null = null;
+    let stage: HTMLDivElement | null = null;
 
-  try {
-    const outer = previewOuterRef.current; // ✅ export outer (has CSS vars)
-    if (!outer) return;
+    try {
+      const outer = previewOuterRef.current;
+      if (!outer) return;
 
-    // Create a hidden A4 stage INSIDE viewport (paintable)
-    stage = document.createElement("div");
-    stage.style.position = "fixed";
-    stage.style.left = "0px";
-    stage.style.top = "0px";
-    stage.style.width = `${A4_W}px`;
-    stage.style.height = `${A4_H}px`;
-    stage.style.background = "#ffffff";
-    stage.style.overflow = "hidden";
-    stage.style.zIndex = "999999";
-    stage.style.opacity = "0.01"; // ✅ NOT 0 (html2canvas can skip painting)
-    stage.style.pointerEvents = "none";
-    stage.style.boxSizing = "border-box";
+      stage = document.createElement("div");
+      stage.style.position = "fixed";
+      stage.style.left = "0px";
+      stage.style.top = "0px";
+      stage.style.width = `${A4_W}px`;
+      stage.style.height = `${A4_H}px`;
+      stage.style.background = "#ffffff";
+      stage.style.overflow = "hidden";
+      stage.style.zIndex = "999999";
+      stage.style.opacity = "0.01";
+      stage.style.pointerEvents = "none";
+      stage.style.boxSizing = "border-box";
 
-    // ✅ Clone the FULL A4 preview stage (includes CSS vars and white bg)
-    const cloneOuter = outer.cloneNode(true) as HTMLElement;
+      const cloneOuter = outer.cloneNode(true) as HTMLElement;
 
-    // Ensure it’s exactly A4
-    cloneOuter.style.width = `${A4_W}px`;
-    cloneOuter.style.height = `${A4_H}px`;
-    cloneOuter.style.overflow = "hidden";
-    cloneOuter.style.background = "#ffffff";
-    cloneOuter.style.boxSizing = "border-box";
+      cloneOuter.style.width = `${A4_W}px`;
+      cloneOuter.style.height = `${A4_H}px`;
+      cloneOuter.style.overflow = "hidden";
+      cloneOuter.style.background = "#ffffff";
+      cloneOuter.style.boxSizing = "border-box";
 
-    // ✅ The first child is your inner wrapper (the one you scale in preview)
-    const cloneInner = cloneOuter.firstElementChild as HTMLElement | null;
-    if (cloneInner) {
-      cloneInner.style.transformOrigin = "top left";
-      cloneInner.style.transform = "none"; // reset preview scaling for export
-      cloneInner.style.width = `${A4_W}px`;
-      cloneInner.style.boxSizing = "border-box";
-    }
+      const cloneInner = cloneOuter.firstElementChild as HTMLElement | null;
+      if (cloneInner) {
+        cloneInner.style.transformOrigin = "top left";
+        cloneInner.style.transform = "none";
+        cloneInner.style.width = `${A4_W}px`;
+        cloneInner.style.boxSizing = "border-box";
+      }
 
-    stage.appendChild(cloneOuter);
-    document.body.appendChild(stage);
+      stage.appendChild(cloneOuter);
+      document.body.appendChild(stage);
 
-    // Wait a frame + fonts (prevents blank/unstyled capture)
-    await new Promise((r) => requestAnimationFrame(() => r(null)));
-    // @ts-ignore
-    if (document.fonts?.ready) {
-      // @ts-ignore
-      await document.fonts.ready;
-    }
-    await new Promise((r) => setTimeout(r, 40));
-
-    // ✅ Fit content into single A4 (export only)
-    if (cloneInner) {
-      const contentW = cloneInner.scrollWidth || A4_W;
-      const contentH = cloneInner.scrollHeight || A4_H;
-      const exportScale = Math.min(1, A4_W / contentW, A4_H / contentH);
-      cloneInner.style.transform = `scale(${exportScale})`;
       await new Promise((r) => requestAnimationFrame(() => r(null)));
+      // @ts-ignore
+      if (document.fonts?.ready) {
+        // @ts-ignore
+        await document.fonts.ready;
+      }
+      await new Promise((r) => setTimeout(r, 40));
+
+      if (cloneInner) {
+        const contentW = cloneInner.scrollWidth || A4_W;
+        const contentH = cloneInner.scrollHeight || A4_H;
+        const exportScale = Math.min(1, A4_W / contentW, A4_H / contentH);
+        cloneInner.style.transform = `scale(${exportScale})`;
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+      }
+
+      const canvas = await html2canvas(cloneOuter, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        logging: false,
+        width: A4_W,
+        height: A4_H,
+        windowWidth: A4_W,
+        windowHeight: A4_H,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+
+      const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      pdf.addImage(imgData, "PNG", 0, 0, pageWidth, pageHeight);
+      pdf.save(`${safeFileName(form.fullName)}_${template}.pdf`);
+
+      setToastMsg("PDF downloaded");
+    } catch (e: any) {
+      setErr(e?.message || "PDF download failed");
+    } finally {
+      if (stage && stage.parentNode) stage.parentNode.removeChild(stage);
     }
-
-    // Capture
-    const canvas = await html2canvas(cloneOuter, {
-      scale: 2,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      logging: false,
-      width: A4_W,
-      height: A4_H,
-      windowWidth: A4_W,
-      windowHeight: A4_H,
-    });
-
-    const imgData = canvas.toDataURL("image/png");
-
-    const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-
-    pdf.addImage(imgData, "PNG", 0, 0, pageWidth, pageHeight);
-    pdf.save(`${safeFileName(form.fullName)}_${template}.pdf`);
-
-    setToastMsg("PDF downloaded");
-  } catch (e: any) {
-    setErr(e?.message || "PDF download failed");
-  } finally {
-    if (stage && stage.parentNode) stage.parentNode.removeChild(stage);
   }
-}
-
 
   /* ---------------------------------------------
    * Render
@@ -2532,7 +2597,10 @@ export default function ResumeBuilderPage() {
                   </div>
                   <div className="space-y-2">
                     {form.links.map((l, idx) => (
-                      <div key={idx} className="grid grid-cols-1 gap-2 md:grid-cols-5">
+                      <div
+                        key={idx}
+                        className="grid grid-cols-1 gap-2 md:grid-cols-5"
+                      >
                         <input
                           value={l.label}
                           onChange={(e) => {
@@ -2752,19 +2820,20 @@ export default function ResumeBuilderPage() {
                   <div
                     ref={previewOuterRef}
                     className="mx-auto bg-white text-black"
-                    style={{
-                      width: `${A4_W}px`,
-                      height: `${A4_H}px`,
-                      overflow: "hidden",
-                      boxSizing: "border-box",
-                      position: "relative",
-                      // tight typography vars
-                      ["--accent" as any]: accent,
-                      ["--fs-base" as any]: "11px",
-                      ["--fs-sm" as any]: "10px",
-                      ["--lh" as any]: "1.25",
-                      ["--pad" as any]: "22px",
-                    } as React.CSSProperties}
+                    style={
+                      {
+                        width: `${A4_W}px`,
+                        height: `${A4_H}px`,
+                        overflow: "hidden",
+                        boxSizing: "border-box",
+                        position: "relative",
+                        ["--accent" as any]: accent,
+                        ["--fs-base" as any]: "11px",
+                        ["--fs-sm" as any]: "10px",
+                        ["--lh" as any]: "1.25",
+                        ["--pad" as any]: "22px",
+                      } as React.CSSProperties
+                    }
                   >
                     <div
                       ref={previewInnerRef}
