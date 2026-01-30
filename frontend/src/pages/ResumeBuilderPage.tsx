@@ -2824,6 +2824,8 @@ export default function ResumeBuilderPage() {
                       {
                         width: `${A4_W}px`,
                         height: `${A4_H}px`,
+                        minWidth: `${A4_W}px`,
+                        minHeight: `${A4_H}px`,
                         overflow: "hidden",
                         boxSizing: "border-box",
                         position: "relative",
@@ -2839,6 +2841,7 @@ export default function ResumeBuilderPage() {
                       ref={previewInnerRef}
                       style={{
                         width: `${A4_W}px`,
+                        height: `${A4_H}px`,
                         transformOrigin: "top left",
                         transform: `scale(${fitScale})`,
                       }}

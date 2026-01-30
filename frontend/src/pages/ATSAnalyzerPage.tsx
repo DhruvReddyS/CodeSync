@@ -191,8 +191,8 @@ function inferFormatSignals(
   if (!issues.length) issues.push("No major blockers detected — next: strengthen impact and role-specific keywords.");
 
   return {
-    wins: wins.slice(0, 12),
-    issues: issues.slice(0, 12),
+    wins: wins.slice(0, 8),
+    issues: issues.slice(0, 8),
     stats: {
       bulletsCount: bullets,
       metricsCount: metrics,
@@ -511,7 +511,7 @@ const Chips: React.FC<{ items: string[]; tone: "good" | "bad"; emptyText: string
   items,
   tone,
   emptyText,
-  max = 44,
+  max = 24,
 }) => {
   const show = (items || []).slice(0, max);
   if (!show.length) return <div className="text-[12px] text-slate-500">{emptyText}</div>;
@@ -618,6 +618,13 @@ export default function ATSAnalyzerPage() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [view, setView] = useState<ViewKey>("overview");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  useEffect(() => {
+    if (!showAdvanced && (view === "tailor" || view === "generate")) {
+      setView("overview");
+    }
+  }, [showAdvanced, view]);
 
   const [jobDescription, setJobDescription] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -891,19 +898,19 @@ export default function ATSAnalyzerPage() {
     const miss = contact?.missing || [];
     if (miss.length) wins.push(`Complete contact header: add ${miss.join(", ")} in plain text (ATS safe).`);
 
-    return wins.slice(0, 8);
+    return wins.slice(0, 5);
   }, [formatIssues, missingKeywords, bestStats, contact]);
 
   const freqPresent = useMemo(() => {
     if (!resumeText || !presentKeywords?.length) return [];
     return keywordFrequency(resumeText, presentKeywords)
-      .slice(0, 12)
+      .slice(0, 8)
       .filter((x) => x.c > 0)
       .map((x) => `${x.k} — ${x.c}×`);
   }, [resumeText, presentKeywords]);
 
   const weightedLines = useMemo(() => {
-    const rows = (weightedMissing || []).slice(0, 14);
+    const rows = (weightedMissing || []).slice(0, 10);
     if (!rows.length) return [];
     return rows.map((x) => `Add/strengthen: ${x.keyword} (appears ${x.jdCount}× in JD)`);
   }, [weightedMissing]);
@@ -945,7 +952,7 @@ export default function ATSAnalyzerPage() {
       </div>
 
       {/* Header */}
-      <div className="relative mb-6 max-w-7xl mx-auto">
+      <div className="relative mb-6 max-w-6xl mx-auto">
         <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-black/70 px-4 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
           CodeSync · ATS Analyzer
@@ -972,7 +979,7 @@ export default function ATSAnalyzerPage() {
       </div>
 
       {/* Main container */}
-      <div className="relative w-full max-w-7xl mx-auto rounded-3xl border border-slate-800 bg-black/70 backdrop-blur-xl shadow-[0_0_40px_rgba(15,23,42,0.9)]">
+      <div className="relative w-full max-w-6xl mx-auto rounded-3xl border border-slate-800 bg-black/70 backdrop-blur-xl shadow-[0_0_40px_rgba(15,23,42,0.9)]">
         {/* Top strip */}
         <div className="flex items-center justify-between border-b border-slate-800/80 px-5 py-3 bg-gradient-to-r from-black via-[#050815] to-black rounded-t-3xl">
           <div className="flex items-center gap-3">
@@ -993,7 +1000,7 @@ export default function ATSAnalyzerPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[460px_1fr]">
+        <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr]">
           {/* LEFT */}
           <div className="border-r border-slate-800/70 p-5">
             {/* JD */}
@@ -1155,8 +1162,10 @@ export default function ATSAnalyzerPage() {
           <div className="p-5">
             {/* Sticky tabs */}
             <div className="sticky top-4 z-10">
-              <div className="rounded-2xl border border-slate-800 bg-black/70 backdrop-blur-xl p-2 flex flex-wrap gap-2">
-                {tabs.map((t) => {
+              <div className="rounded-2xl border border-slate-800 bg-black/70 backdrop-blur-xl p-2 flex flex-wrap gap-2 items-center">
+                {tabs
+                  .filter((t) => showAdvanced || (t.k !== "tailor" && t.k !== "generate"))
+                  .map((t) => {
                   const disabled = Boolean(t.needsReport) && !hasReport;
                   return (
                     <button
@@ -1177,6 +1186,20 @@ export default function ATSAnalyzerPage() {
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className={cx(
+                    "inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs transition",
+                    showAdvanced
+                      ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                      : "border-slate-700 bg-slate-950/40 text-slate-300 hover:bg-slate-900/60"
+                  )}
+                  title="Toggle advanced AI outputs"
+                >
+                  <RiEyeLine className="text-base" />
+                  {showAdvanced ? "Hide AI" : "Show AI"}
+                </button>
               </div>
             </div>
 
@@ -1314,7 +1337,7 @@ export default function ATSAnalyzerPage() {
                       items={formatIssues}
                       tone="bad"
                       icon={<RiAlertLine className="text-rose-200" />}
-                      max={10}
+                      max={6}
                     />
 
                     <ListCard
@@ -1323,7 +1346,7 @@ export default function ATSAnalyzerPage() {
                       items={formatWins}
                       tone="good"
                       icon={<RiCheckDoubleLine className="text-emerald-200" />}
-                      max={10}
+                      max={6}
                     />
 
                     <ListCard
@@ -1332,7 +1355,7 @@ export default function ATSAnalyzerPage() {
                       items={freqPresent.length ? freqPresent : ["Not enough data yet. Run analysis + ensure resume text extracted."]}
                       tone="neutral"
                       icon={<RiSearchEyeLine className="text-slate-300" />}
-                      max={12}
+                      max={6}
                     />
 
                     <ListCard
@@ -1341,7 +1364,7 @@ export default function ATSAnalyzerPage() {
                       items={weightedLines.length ? weightedLines : ["No weighted missing list from backend yet."]}
                       tone="neutral"
                       icon={<RiScan2Line className="text-slate-300" />}
-                      max={14}
+                      max={8}
                     />
                   </div>
                 </motion.div>
@@ -1362,7 +1385,7 @@ export default function ATSAnalyzerPage() {
                       Missing Keywords (High ROI)
                     </div>
                     <div className="mt-2">
-                      <Chips items={missingKeywords} tone="bad" emptyText="No major missing keywords detected." />
+                      <Chips items={missingKeywords} tone="bad" emptyText="No major missing keywords detected." max={18} />
                     </div>
                   </SpotlightCard>
 
@@ -1372,7 +1395,7 @@ export default function ATSAnalyzerPage() {
                       Present Keywords (Strong Match)
                     </div>
                     <div className="mt-2">
-                      <Chips items={presentKeywords} tone="good" emptyText="No strong keyword matches detected yet." />
+                      <Chips items={presentKeywords} tone="good" emptyText="No strong keyword matches detected yet." max={18} />
                     </div>
                   </SpotlightCard>
                 </motion.div>
@@ -1402,7 +1425,7 @@ export default function ATSAnalyzerPage() {
                         <div key={b.title} className="rounded-2xl border border-slate-800 bg-black/30 p-4">
                           <div className="text-xs font-semibold text-slate-200">{b.title}</div>
                           <ul className="mt-3 text-xs text-slate-300 space-y-1">
-                            {b.items.slice(0, 14).map((x, i) => (
+                            {b.items.slice(0, 8).map((x, i) => (
                               <li key={i}>• {cleanText(x)}</li>
                             ))}
                             {!b.items.length && <li className="text-slate-500">Not generated yet.</li>}
