@@ -1,5 +1,5 @@
 // src/pages/LandingPage/index.tsx
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   motion,
@@ -56,7 +56,26 @@ const BRAND_GRAD =
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const reduce = useReducedMotion() ?? false;
-  const glow = useCursorGlow();
+  const [lowPower, setLowPower] = useState(false);
+  const glow = useCursorGlow(lowPower);
+
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const coarse = window.matchMedia("(pointer: coarse)");
+    const update = () =>
+      setLowPower(
+        reduced.matches || coarse.matches || window.innerWidth < 900
+      );
+    update();
+    window.addEventListener("resize", update);
+    reduced.addEventListener?.("change", update);
+    coarse.addEventListener?.("change", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      reduced.removeEventListener?.("change", update);
+      coarse.removeEventListener?.("change", update);
+    };
+  }, []);
 
   // ✅ fix MotionValue usage in template string
   const cursorPlasma = useMotionTemplate`
@@ -70,7 +89,7 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-[#050509] text-slate-100 overflow-x-hidden">
-      <HyperBackdrop />
+      <HyperBackdrop lowMotion={lowPower} />
 
       {/* Cursor plasma (brand hues) */}
       <motion.div
@@ -193,10 +212,10 @@ const LandingPage: React.FC = () => {
             </div>
 
             {/* RIGHT: brand holo artifact */}
-            <ParallaxY strength={44}>
+            <ParallaxY strength={44} disabled={lowPower}>
               <Tilt className="will-change-transform">
                 <HoloCard className="p-6 sm:p-7 relative">
-                  <OrbitParticles className="opacity-70" />
+                  <OrbitParticles className="opacity-70" count={lowPower ? 4 : 10} />
                   <div className="relative">
                     <div className="flex items-center justify-between">
                       <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Identity Fusion</div>
@@ -273,7 +292,7 @@ const LandingPage: React.FC = () => {
                       />
                       <div className="relative">
                         <div className="text-2xl sm:text-3xl font-semibold text-slate-50">
-                          <AnimatedNumber target={s.target} suffix={s.suffix} />
+                          <AnimatedNumber target={s.target} suffix={s.suffix} animate={!lowPower} />
                         </div>
                         <div className="mt-1 text-sm font-medium text-slate-200">{s.label}</div>
                         <div className="mt-2 text-[11px] text-slate-500">{s.hint ?? "verified · unified · clean"}</div>
@@ -704,7 +723,7 @@ function Chamber({
           <motion.div style={reduce ? undefined : { y, rotateZ: rot }} className={cn(reversed ? "lg:order-2" : "", "will-change-transform")}>
             <Tilt>
               <HoloCard className="p-6 sm:p-7 relative overflow-hidden">
-                <OrbitParticles className="opacity-70" />
+                <OrbitParticles className="opacity-70" count={4} />
 
                 <motion.div
                   aria-hidden
@@ -814,24 +833,17 @@ function ArtifactDashboard() {
 
       <div className="mt-4 rounded-2xl border border-slate-800 bg-[#060812] p-3">
         <div className="text-[11px] text-slate-400">trend reactor</div>
-        <div className="mt-2 grid grid-cols-10 gap-2">
-          {Array.from({ length: 40 }).map((_, i) => (
+        <div className="mt-3 flex items-end gap-2 h-24">
+          {[26, 48, 36, 62, 54, 70, 58, 82].map((h, i) => (
             <div
               key={i}
-              className="h-7 rounded-lg border border-slate-800 bg-[#070a14]"
-              style={{
-                opacity: 0.35 + (i % 6) * 0.1,
-                boxShadow:
-                  i % 9 === 0
-                    ? "0 0 24px rgba(34,211,238,0.18)"
-                    : i % 7 === 0
-                    ? "0 0 24px rgba(167,139,250,0.14)"
-                    : i % 5 === 0
-                    ? "0 0 24px rgba(217,70,239,0.12)"
-                    : "none",
-              }}
+              className="flex-1 rounded-t-xl bg-[linear-gradient(to_top,#0b1220,#22d3ee,#a78bfa,#d946ef)]"
+              style={{ height: `${h}%`, opacity: 0.9 }}
             />
           ))}
+        </div>
+        <div className="mt-2 text-[10px] text-slate-500">
+          Last 8 sessions · volatility down · focus on DP + graphs
         </div>
       </div>
     </div>
@@ -947,11 +959,12 @@ function ArtifactCalendar() {
       </div>
 
       <div className="mt-3 grid grid-cols-7 gap-2">
-        {Array.from({ length: 21 }).map((_, i) => (
-          <div key={i} className="h-16 rounded-2xl border border-slate-800 bg-[#060812] p-2">
-            <div className="text-[10px] text-slate-500">{i + 8}</div>
-            {i % 6 === 0 && <TagMini label="CF 8PM" tone="cyan" />}
-            {i % 8 === 0 && <TagMini label="LC 9PM" tone="violet" />}
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => (
+          <div key={d} className="rounded-2xl border border-slate-800 bg-[#060812] p-2">
+            <div className="text-[10px] text-slate-500">{d}</div>
+            <div className="mt-2 h-8 rounded-xl bg-slate-900/70 border border-slate-800 flex items-center justify-center text-[10px] text-slate-400">
+              {i === 1 ? "LC 9PM" : i === 4 ? "CF 8PM" : "Focus"}
+            </div>
           </div>
         ))}
       </div>
@@ -1152,12 +1165,20 @@ function VaultCard({
 /* =====================================================================================
   Local AnimatedNumber (safe)
 ===================================================================================== */
-function AnimatedNumber({ target, suffix }: { target: number; suffix?: string }) {
+function AnimatedNumber({
+  target,
+  suffix,
+  animate = true,
+}: {
+  target: number;
+  suffix?: string;
+  animate?: boolean;
+}) {
   const reduce = useReducedMotion() ?? false;
-  const [value, setValue] = useState(reduce ? target : 0);
+  const [value, setValue] = useState(reduce || !animate ? target : 0);
 
   React.useEffect(() => {
-    if (reduce) return;
+    if (reduce || !animate) return;
     let raf = 0;
     const start = performance.now();
     const duration = 1200;
@@ -1171,7 +1192,7 @@ function AnimatedNumber({ target, suffix }: { target: number; suffix?: string })
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target, reduce]);
+  }, [target, reduce, animate]);
 
   return (
     <span>

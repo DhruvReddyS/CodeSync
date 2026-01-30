@@ -18,8 +18,12 @@ export default function PublicRoute({ children }: PublicRouteProps) {
     return <>{children}</>;
   }
 
-  // Logged in student → send to dashboard
+  // Logged in student → send to onboarding if not completed
   if (role === "student") {
+    const onboarding = sessionStorage.getItem("onboardingCompleted");
+    if (onboarding === "false") {
+      return <Navigate to="/onboarding" replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
 

@@ -14,7 +14,7 @@ export function cn(...classes: Array<string | false | null | undefined>) {
   CURSOR GLOW (spring-smoothed)
 ===================================================================================== */
 
-export function useCursorGlow() {
+export function useCursorGlow(disabled = false) {
   const reduce = useReducedMotion() ?? false;
   const [pos, setPos] = useState({ x: 0, y: 0 });
 
@@ -22,7 +22,7 @@ export function useCursorGlow() {
     const setCenter = () => setPos({ x: window.innerWidth * 0.55, y: window.innerHeight * 0.35 });
     setCenter();
 
-    if (reduce) return;
+    if (reduce || disabled) return;
     
     let rafId: number;
     const onMove = (e: MouseEvent) => {
@@ -39,7 +39,7 @@ export function useCursorGlow() {
       window.removeEventListener("resize", setCenter);
       cancelAnimationFrame(rafId);
     };
-  }, [reduce]);
+  }, [reduce, disabled]);
 
   // Reduced stiffness for better performance
   const sx = useSpring(pos.x, { stiffness: 100, damping: 25, mass: 0.5 });
@@ -52,7 +52,7 @@ export function useCursorGlow() {
   HYPER BACKDROP (aurora + warp grid + scanlines + noise + beams)
 ===================================================================================== */
 
-export function HyperBackdrop() {
+export function HyperBackdrop({ lowMotion = false }: { lowMotion?: boolean } = {}) {
   return (
     <>
       <style>{`
@@ -80,32 +80,38 @@ export function HyperBackdrop() {
             backgroundImage:
               "linear-gradient(to right, rgba(148,163,184,0.10) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.10) 1px, transparent 1px)",
             backgroundSize: "46px 46px",
-            animation: "warp 14s linear infinite",
+            animation: lowMotion ? "none" : "warp 14s linear infinite",
           }}
         />
       </div>
 
       {/* Scanlines */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 z-[0] opacity-[0.18]">
-        <div className="absolute inset-0 bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.06)_1px,transparent_1px,transparent_7px)] mix-blend-overlay" />
-      </div>
+      {!lowMotion && (
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-[0] opacity-[0.18]">
+          <div className="absolute inset-0 bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.06)_1px,transparent_1px,transparent_7px)] mix-blend-overlay" />
+        </div>
+      )}
 
       {/* Noise */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 z-[0] opacity-[0.06]">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22300%22%3E%3Cfilter id=%22n%22 x=%220%22 y=%220%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22300%22 height=%22300%22 filter=%22url(%23n)%22 opacity=%220.55%22/%3E%3C/svg%3E')] mix-blend-overlay" />
-      </div>
+      {!lowMotion && (
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-[0] opacity-[0.06]">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22300%22%3E%3Cfilter id=%22n%22 x=%220%22 y=%220%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22300%22 height=%22300%22 filter=%22url(%23n)%22 opacity=%220.55%22/%3E%3C/svg%3E')] mix-blend-overlay" />
+        </div>
+      )}
 
       {/* Ambient beams */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 z-[0] opacity-[0.55]">
-        <div
-          className="absolute -inset-x-24 top-[18%] h-20 bg-gradient-to-r from-transparent via-white/12 to-transparent"
-          style={{ animation: "beam 6.8s linear infinite" }}
-        />
-        <div
-          className="absolute -inset-x-24 top-[52%] h-16 bg-gradient-to-r from-transparent via-white/10 to-transparent"
-          style={{ animation: "beam 8.6s linear infinite" }}
-        />
-      </div>
+      {!lowMotion && (
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-[0] opacity-[0.55]">
+          <div
+            className="absolute -inset-x-24 top-[18%] h-20 bg-gradient-to-r from-transparent via-white/12 to-transparent"
+            style={{ animation: "beam 6.8s linear infinite" }}
+          />
+          <div
+            className="absolute -inset-x-24 top-[52%] h-16 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+            style={{ animation: "beam 8.6s linear infinite" }}
+          />
+        </div>
+      )}
     </>
   );
 }
@@ -176,7 +182,18 @@ export function Reveal({ children, delay = 0, y = 18 }: { children: React.ReactN
   );
 }
 
-export function ParallaxY({ children, strength = 44 }: { children: React.ReactNode; strength?: number }) {
+export function ParallaxY({
+  children,
+  strength = 44,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  strength?: number;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return <div>{children}</div>;
+  }
   const ref = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
   const y = useTransform(scrollYProgress, [0, 1], [strength, -strength]);
@@ -273,10 +290,16 @@ export function Tilt({ children, className = "", max = 10 }: { children: React.R
   ORBIT PARTICLES
 ===================================================================================== */
 
-export function OrbitParticles({ className = "" }: { className?: string }) {
+export function OrbitParticles({
+  className = "",
+  count = 10,
+}: {
+  className?: string;
+  count?: number;
+}) {
   return (
     <div aria-hidden className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}>
-      {Array.from({ length: 10 }).map((_, i) => (
+      {Array.from({ length: count }).map((_, i) => (
         <div
           key={i}
           className="absolute left-1/2 top-1/2"
