@@ -22,10 +22,10 @@ export async function computeAndSaveScores(
   platformStats: Record<PlatformId, any | null>
 ): Promise<StudentScores> {
   // Import here to avoid circular dependency
-  const { computeCpScores } = require("../lib/scoringEngine");
+  const { computeCpScoresFromStats } = require("../lib/scoringEngine");
 
   // Compute from platform stats
-  const cpScores = computeCpScores(platformStats);
+  const cpScores = computeCpScoresFromStats(platformStats);
 
   // Structure for studentScores collection
   const studentScores: StudentScores = {

@@ -150,6 +150,22 @@ router.post(
 
       await studentRef.set(dataToSet, { merge: true });
 
+      // ✅ Create empty scores document even if no handles
+      try {
+        const { computeAndSaveScores } = require("../services/studentScoresService");
+        const emptyStats: Record<string, any> = {
+          leetcode: null,
+          codeforces: null,
+          codechef: null,
+          atcoder: null,
+          hackerrank: null,
+          github: null,
+        };
+        await computeAndSaveScores(studentId, emptyStats);
+      } catch (scoresErr) {
+        console.error("[STUDENT /onboarding] Failed to initialize scores:", scoresErr);
+      }
+
       const hasAnyHandle =
         !!codingHandles &&
         !!(
