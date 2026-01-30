@@ -224,9 +224,6 @@ const OnboardingPage: React.FC = () => {
       // API REQUEST (authorization auto-injected by interceptor)
       await apiClient.post("/student/onboarding", payload);
 
-      // ✅ mark in frontend that onboarding is done (optional but handy)
-      sessionStorage.setItem("onboardingCompleted", "true");
-
       // ✅ hard redirect to dashboard in history (no back to onboarding)
       navigate("/dashboard", { replace: true });
     } catch (err: any) {
@@ -493,6 +490,7 @@ const OnboardingPage: React.FC = () => {
           </div>
         </form>
       </div>
+
     </div>
   );
 };

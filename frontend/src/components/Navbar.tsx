@@ -14,6 +14,7 @@ import {
 } from "react-icons/ri";
 import { auth } from "../lib/firebaseClient";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import apiClient from "../lib/apiClient";
 import csLogo from "../assets/logo/logo.png";
 
 type Role = "student" | "instructor" | null;
@@ -41,6 +42,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
   const [displayName, setDisplayName] = useState<string>("Instructor");
   const [displayEmail, setDisplayEmail] = useState<string>("instructor@college.edu");
   const [avatarPhoto, setAvatarPhoto] = useState<string | null>(null);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
 
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -125,6 +127,42 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
 
     return () => unsub();
   }, [role]);
+
+  /* --------------------------------------------------
+     ✅ CHECK ONBOARDING STATUS FOR STUDENTS
+     - Hide nav links if onboarding not complete
+  -------------------------------------------------- */
+  useEffect(() => {
+    if (role !== "student" || !isLoggedIn) {
+      setOnboardingCompleted(null);
+      return;
+    }
+
+    async function checkOnboarding() {
+      // Fast-path: check frontend flag first
+      const localFlag = sessionStorage.getItem("onboardingCompleted");
+      if (localFlag === "true") {
+        setOnboardingCompleted(true);
+        return;
+      }
+
+      // Check backend
+      try {
+        const res = await apiClient.get("/student/profile");
+        const completed = !!res.data?.onboardingCompleted;
+        setOnboardingCompleted(completed);
+        if (completed) {
+          sessionStorage.setItem("onboardingCompleted", "true");
+        }
+      } catch (err: any) {
+        // If error, assume not completed
+        setOnboardingCompleted(false);
+        sessionStorage.setItem("onboardingCompleted", "false");
+      }
+    }
+
+    checkOnboarding();
+  }, [role, isLoggedIn, authVersion]);
 
   /* --------------------------------------------------
      🔐 CLOSE DROPDOWNS WHEN CLICKING OUTSIDE
@@ -240,8 +278,8 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
           </span>
         </Link>
 
-        {/* NAV LINKS (CENTER) */}
-        {showLoggedInUI && role === "student" && (
+        {/* NAV LINKS (CENTER) - Only show if student completed onboarding */}
+        {showLoggedInUI && role === "student" && onboardingCompleted === true && (
           <ul className="hidden lg:flex items-center gap-5 text-[0.7rem] sm:text-xs font-medium uppercase tracking-[0.16em]">
             {studentLinks.map((link) => (
               <li key={link.to}>
@@ -251,6 +289,13 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
               </li>
             ))}
           </ul>
+        )}
+
+        {/* 🟡 Student not onboarded - show message */}
+        {showLoggedInUI && role === "student" && onboardingCompleted === false && (
+          <div className="hidden lg:block text-center text-[0.7rem] text-slate-400">
+            <p>Complete onboarding to unlock all features</p>
+          </div>
         )}
 
         {/* ✅ Instructor nav (UPDATED) */}

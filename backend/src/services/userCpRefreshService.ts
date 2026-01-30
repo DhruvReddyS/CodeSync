@@ -1,7 +1,7 @@
-// src/services/userCpRefreshService.ts
-
-import { firestore, FieldValue } from "../config/firebase";
+import { FieldValue } from "../config/firebase";
 import { PlatformId } from "../lib/scoringEngine";
+import { collections } from "../models/collections";
+import { computeAndSaveScores } from "./studentScoresService";
 
 // SCRAPERS (already in your project)
 import { scrapeGitHub } from "./scrapers/githubScraper";
@@ -11,8 +11,8 @@ import { scrapeCodeChef } from "./scrapers/codechefScraper";
 import { scrapeHackerRank } from "./scrapers/hackerrankScraper";
 import { scrapeAtcoder } from "./scrapers/atcoderScraper";
 
-const STUDENTS_COLLECTION = "students";
-const studentsCol = firestore.collection(STUDENTS_COLLECTION);
+// Use centralized collection reference
+const studentsCol = collections.students;
 
 const ALL_PLATFORMS: PlatformId[] = [
   "leetcode",
@@ -22,10 +22,6 @@ const ALL_PLATFORMS: PlatformId[] = [
   "hackerrank",
   "github",
 ];
-
-type CpHandles = Partial<Record<PlatformId, string>>;
-
-type RawPlatformStatsMap = Record<PlatformId, any | null>;
 
 /* --------------------------------------------------
  * Small helpers
@@ -113,7 +109,8 @@ async function savePlatformProfile(
   const payload = {
     ...profileData,
     platform,
-    lastScrapedAt: FieldValue.serverTimestamp(),
+    scrapedAt: FieldValue.serverTimestamp(), // ✅ Renamed from lastScrapedAt
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // ✅ NEW: expires in 24 hours
     updatedAt: FieldValue.serverTimestamp(),
   };
 
@@ -293,10 +290,10 @@ function computePlatformSkill(
 
 /* --------------------------------------------------
  * Compute cpScores from FULL platformStats map
- *  → What gets stored on students/{id}.cpScores
+ *  → Save to studentScores collection ✅
  * -------------------------------------------------- */
 function computeCpScoresFromStats(
-  platformStats: RawPlatformStatsMap
+  platformStats: Record<PlatformId, any | null>
 ) {
   const platformSkills: Partial<Record<PlatformId, number>> = {};
   let totalProblemsSolved = 0;
@@ -319,7 +316,7 @@ function computeCpScoresFromStats(
     displayScore,
     platformSkills,
     totalProblemsSolved,
-    lastComputedAt: FieldValue.serverTimestamp(),
+    computedAt: FieldValue.serverTimestamp(), // ✅ Renamed from lastComputedAt
   };
 }
 
@@ -360,13 +357,16 @@ export async function refreshStudentCPData(
     })
   );
 
-  // 2) Load full cpProfiles → compute cpScores → save on student doc
+  // 2) Load full cpProfiles → compute cpScores → save to studentScores collection ✅
   const platformStats = await loadPlatformStatsMap(studentId);
   const cpScores = computeCpScoresFromStats(platformStats);
 
+  // ✅ Write scores to dedicated studentScores collection (not to student doc)
+  await computeAndSaveScores(studentId, platformStats);
+  
+  // Update student doc timestamp
   await studentsCol.doc(studentId).set(
     {
-      cpScores,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }
@@ -388,11 +388,12 @@ export async function refreshStudentPlatform(
     // No handle → clear profile + recompute cpScores
     await savePlatformProfile(studentId, platform, null);
     const platformStats = await loadPlatformStatsMap(studentId);
-    const cpScores = computeCpScoresFromStats(platformStats);
-
+    
+    // ✅ Write scores to dedicated studentScores collection
+    await computeAndSaveScores(studentId, platformStats);
+    
     await studentsCol.doc(studentId).set(
       {
-        cpScores,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -407,6 +408,10 @@ export async function refreshStudentPlatform(
       platform,
       handle: handle.trim(),
     });
+    
+    // ✅ Recompute scores after platform refresh
+    const platformStats = await loadPlatformStatsMap(studentId);
+    await computeAndSaveScores(studentId, platformStats);
   } catch (err) {
     console.error(
       `[userCpRefreshService] Failed to scrape ${platform} for student=${studentId}, handle=${handle}:`,
@@ -415,14 +420,6 @@ export async function refreshStudentPlatform(
     // keep previous profile data
   }
 
-  const platformStats = await loadPlatformStatsMap(studentId);
-  const cpScores = computeCpScoresFromStats(platformStats);
-
-  await studentsCol.doc(studentId).set(
-    {
-      cpScores,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  // Scores are saved to `studentScores` collection by `computeAndSaveScores`
+  // No longer persist `cpScores` inside student document here.
 }

@@ -4,30 +4,14 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-import { firestore, firebaseAuth, FieldValue } from "../config/firebase";
+import { firebaseAuth, FieldValue } from "../config/firebase";
 import { signToken } from "../config/jwt";
+import { collections, BaseUser, StudentProfile, InstructorCredentials } from "../models/collections";
 
 const router = Router();
 
-// Firestore collections
-const usersCol = firestore.collection("users");
-const studentsCol = firestore.collection("students");
-const instructorsCol = firestore.collection("instructors");
-
-type UserRole = "student" | "instructor";
-
-/**
- * Base user shape in Firestore.
- * createdAt / updatedAt are stored, but not typed here
- * so we avoid FieldValue vs Timestamp type issues.
- */
-interface BaseUser {
-  firebaseUid?: string | null;
-  email: string;
-  name?: string;
-  photoURL?: string;
-  role: UserRole;
-}
+// Use centralized collection references
+const { users: usersCol, students: studentsCol, instructors: instructorsCol } = collections;
 
 /* ----------------------------------------------------------
    Helper: Find user by email
@@ -82,9 +66,10 @@ router.post("/student/google", async (req, res) => {
         name: displayName,
         photoURL,
         role: "student",
+        status: "active", // ✅ NEW: explicit status
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      } as BaseUser);
     } else {
       userId = existing.id;
 
@@ -95,6 +80,7 @@ router.post("/student/google", async (req, res) => {
           name: existing.name || displayName,
           photoURL: existing.photoURL || photoURL,
           role: existing.role || "student",
+          status: existing.status || "active", // ✅ Preserve status
           updatedAt: FieldValue.serverTimestamp(),
         } as Partial<BaseUser>,
         { merge: true }
@@ -107,13 +93,18 @@ router.post("/student/google", async (req, res) => {
 
     if (!studentSnap.exists) {
       await studentRef.set({
-        userId,
+        // No userId field - use doc ID instead ✅
+        onboardingCompleted: false,
+        status: "active", // ✅ NEW: explicit status
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      } as Partial<StudentProfile>);
     } else {
       await studentRef.set(
-        { updatedAt: FieldValue.serverTimestamp() },
+        {
+          status: "active", // ✅ Ensure active
+          updatedAt: FieldValue.serverTimestamp(),
+        } as Partial<StudentProfile>,
         { merge: true }
       );
     }
@@ -179,18 +170,18 @@ router.post("/instructor/register", async (req, res) => {
       email,
       name: name || "Instructor",
       role: "instructor",
-      firebaseUid: null,
+      firebaseUid: null, // ✅ Instructors don't use Firebase Auth
+      status: "active", // ✅ NEW: explicit status
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    } as BaseUser);
 
-    // Create instructor doc
+    // Create instructor doc (stores password hash only)
     await instructorsCol.doc(userId).set({
       userId,
       passwordHash,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+      // createdAt and updatedAt removed - use users doc as source of truth
+    } as InstructorCredentials);
 
     return res.json({ message: "Instructor created successfully", id: userId });
   } catch (err) {

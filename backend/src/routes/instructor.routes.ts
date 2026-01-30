@@ -1,5 +1,5 @@
 import express, { Response } from "express";
-import { firestore } from "../config/firebase";
+import { collections } from "../models/collections";
 
 import authMiddleware, { AuthedRequest } from "../middleware/auth.middleware";
 import { requireInstructor } from "../middleware/role.middleware";
@@ -29,7 +29,8 @@ const PLATFORMS: PlatformId[] = [
   "atcoder",
 ];
 
-const studentsCol = firestore.collection("students");
+// Use centralized collection references
+const { students: studentsCol, studentScores: studentScoresCol } = collections;
 
 /* ----------------- utils ----------------- */
 
@@ -320,16 +321,20 @@ router.get(
 
       const snap = await queryRef.limit(limit).get();
 
-      const students = snap.docs
-        .map((doc) => {
+      // ✅ Fetch scores from studentScores collection
+      const students = await Promise.all(
+        snap.docs.map(async (doc) => {
           const d = doc.data() || {};
-          const cpScores = d.cpScores || {};
-          const score = isNum(cpScores.displayScore)
+          
+          // Get scores from dedicated studentScores collection
+          const scoresDoc = await studentScoresCol.doc(doc.id).get();
+          const cpScores: any = scoresDoc.exists ? scoresDoc.data() : {};
+          const score = isNum(cpScores?.displayScore)
             ? clamp(cpScores.displayScore)
             : 0;
 
           const lastActiveRaw =
-            d.lastActiveAt ?? d.updatedAt ?? cpScores.updatedAt ?? null;
+            d.lastActiveAt ?? d.updatedAt ?? null;
 
           return {
             id: doc.id,
@@ -337,7 +342,7 @@ router.get(
 
             branch: d.branch ?? null,
             section: d.section ?? null,
-            year: d.yearOfStudy ?? d.year ?? null,
+            year: d.yearOfStudy ?? null, // ✅ Removed d.year fallback
             rollNumber: d.rollNumber ?? null,
 
             codesyncScore: score,
@@ -348,13 +353,17 @@ router.get(
             phone: d.phone ?? null,
           };
         })
-        .filter((s) => {
-          if (!q) return true;
-          const hay =
-            `${s.name} ${s.id} ${s.rollNumber ?? ""} ${s.branch ?? ""} ${s.section ?? ""} ${s.year ?? ""}`.toLowerCase();
-          return hay.includes(q);
-        })
-        .sort((a, b) => (b.codesyncScore ?? 0) - (a.codesyncScore ?? 0));
+      )
+        .then((students) =>
+          students
+            .filter((s) => {
+              if (!q) return true;
+              const hay =
+                `${s.name} ${s.id} ${s.rollNumber ?? ""} ${s.branch ?? ""} ${s.section ?? ""} ${s.year ?? ""}`.toLowerCase();
+              return hay.includes(q);
+            })
+            .sort((a, b) => (b.codesyncScore ?? 0) - (a.codesyncScore ?? 0))
+        );
 
       return res.json({
         students,

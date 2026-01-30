@@ -1,7 +1,7 @@
 // src/routes/student.routes.ts
 
 import express, { Response } from "express";
-import { firestore, FieldValue } from "../config/firebase";
+import { FieldValue } from "../config/firebase";
 
 import authMiddleware, { AuthedRequest } from "../middleware/auth.middleware";
 import { requireStudent } from "../middleware/role.middleware";
@@ -11,6 +11,8 @@ import {
   refreshStudentCPData,
   refreshStudentPlatform,
 } from "../services/userCpRefreshService";
+import { collections } from "../models/collections";
+import { getStudentScores } from "../services/studentScoresService";
 
 const router = express.Router();
 
@@ -20,8 +22,8 @@ type AuthedReq = AuthedRequest & {
   params: any;
 };
 
-const STUDENTS_COLLECTION = "students";
-const studentsCol = firestore.collection(STUDENTS_COLLECTION);
+// Use centralized collection reference
+const studentsCol = collections.students;
 
 /* --------------------------------------------------
  * Helper: Load a map of PlatformId → FULL scraped stats
@@ -112,7 +114,7 @@ router.post(
       const isNew = !existingSnap.exists;
 
       const dataToSet: Record<string, any> = {
-        userId: studentId,
+        // Removed: userId field (use doc ID instead) ✅
 
         fullName,
         collegeEmail: collegeEmail || null,
@@ -120,10 +122,11 @@ router.post(
         phone: phone || null,
         branch,
         yearOfStudy,
-        year: yearOfStudy,
+        // Removed: duplicate 'year' field ✅
+
         section,
         rollNumber,
-        graduationYear,
+        graduationYear: graduationYear || null,
 
         cpHandles: {
           leetcode: codingHandles?.leetcode || null,
@@ -137,6 +140,7 @@ router.post(
         profile: profile || {},
 
         onboardingCompleted: true,
+        status: "active", // ✅ NEW: explicit status
         updatedAt: FieldValue.serverTimestamp(),
       };
 
@@ -239,7 +243,9 @@ router.get(
 
       const data = snap.data() || {};
       const cpHandles = data.cpHandles || {};
-      const cpScores = data.cpScores || null;
+      
+      // ✅ Read scores from studentScores collection (not from student doc)
+      const cpScores = await getStudentScores(studentId, true);
       const platformStats = await loadPlatformStatsMap(studentId);
 
       return res.json({
@@ -274,9 +280,8 @@ router.post(
 
       await refreshStudentPlatform(studentId, platform);
 
-      const snap = await studentsCol.doc(studentId).get();
-      const data = snap.data() || {};
-      const cpScores = data.cpScores || null;
+      // Read scores from dedicated studentScores collection
+      const cpScores = await getStudentScores(studentId, true);
       const platformStats = await loadPlatformStatsMap(studentId);
 
       return res.json({ cpScores, platformStats });
@@ -302,9 +307,8 @@ router.post(
 
       await refreshStudentCPData(studentId);
 
-      const snap = await studentsCol.doc(studentId).get();
-      const data = snap.data() || {};
-      const cpScores = data.cpScores || null;
+      // Return updated scores from studentScores collection
+      const cpScores = await getStudentScores(studentId, true);
       const platformStats = await loadPlatformStatsMap(studentId);
 
       return res.json({ cpScores, platformStats });
@@ -328,32 +332,39 @@ router.get(
       const rawLimit = (req.query?.limit as string) || "50";
       const limit = Number(rawLimit) || 50;
 
-      const snap = await studentsCol
-        .where("cpScores.displayScore", ">", 0)
-        .orderBy("cpScores.displayScore", "desc")
+      // Query studentScores collection for leaderboard (fast)
+      const scoresSnap = await collections.studentScores
+        .where("displayScore", ">", 0)
+        .orderBy("displayScore", "desc")
         .limit(limit)
         .get();
 
-      const leaderboard = snap.docs.map((doc: any, index: number) => {
-        const d = doc.data() || {};
-        const cpScores = d.cpScores || null;
+      const leaderboard: any[] = [];
+
+      // Fetch student basic info in parallel
+      const promises = scoresSnap.docs.map(async (doc: any, index: number) => {
+        const studentId = doc.id;
+        const scores = doc.data() || {};
+
+        const studentSnap = await studentsCol.doc(studentId).get();
+        const sd = studentSnap.exists ? (studentSnap.data() || {}) : {};
 
         return {
-          studentId: doc.id,
+          studentId,
           rank: index + 1,
-
-          name: d.fullName || d.fullname || d.name || null,
-          branch: d.branch || null,
-          section: d.section || null,
-          year: d.yearOfStudy || d.year || null,
-
-          rollNumber: d.rollNumber || null,
-          avatarUrl: d.profile?.avatarUrl || d.avatarUrl || null,
-
-          cpScores,
-          cpHandles: d.cpHandles || {},
+          name: sd.fullName || sd.fullname || sd.name || null,
+          branch: sd.branch || null,
+          section: sd.section || null,
+          year: sd.yearOfStudy || sd.year || null,
+          rollNumber: sd.rollNumber || null,
+          avatarUrl: sd.profile?.avatarUrl || sd.avatarUrl || null,
+          cpScores: scores,
+          cpHandles: sd.cpHandles || {},
         };
       });
+
+      const resolved = await Promise.all(promises);
+      resolved.forEach((r) => leaderboard.push(r));
 
       return res.json({ leaderboard });
     } catch (err: any) {
@@ -387,7 +398,7 @@ router.get(
 
       const data = snap.data() || {};
 
-      const cpScores = data.cpScores || null;
+      const cpScores = await getStudentScores(targetId, true);
       const platformStats = await loadPlatformStatsMap(targetId);
 
       return res.json({
@@ -443,17 +454,15 @@ router.get(
 
       const data = snap.data() || {};
 
-      let onboardingCompleted = data.onboardingCompleted === true;
+      // Return actual onboarding status from database (don't auto-set it)
+      const onboardingCompleted = data.onboardingCompleted === true;
 
+      // If student hasn't completed onboarding, return 403
       if (!onboardingCompleted) {
-        onboardingCompleted = true;
-        await ref.set(
-          {
-            onboardingCompleted: true,
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
+        return res.status(403).json({
+          message: "Please complete onboarding first",
+          onboardingRequired: true,
+        });
       }
 
       return res.json({
