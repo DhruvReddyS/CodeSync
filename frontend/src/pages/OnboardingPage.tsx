@@ -224,8 +224,11 @@ const OnboardingPage: React.FC = () => {
       // API REQUEST (authorization auto-injected by interceptor)
       await apiClient.post("/student/onboarding", payload);
 
+      // ✅ mark onboarding complete for navbar + protected routes
+      sessionStorage.setItem("onboardingCompleted", "true");
+
       // ✅ hard redirect to dashboard in history (no back to onboarding)
-      navigate("/dashboard", { replace: true });
+      window.location.replace("/dashboard");
     } catch (err: any) {
       console.error("[Onboarding] submit error:", err);
       setServerError(
