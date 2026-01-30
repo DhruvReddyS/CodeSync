@@ -32,6 +32,7 @@ const allowedOrigins = new Set([
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://codesync-mvsr.onrender.com", // ✅ Production frontend
 ]);
 if (FRONTEND_URL)
     allowedOrigins.add(FRONTEND_URL);
@@ -45,6 +46,15 @@ app.use((0, cors_1.default)({
     },
     credentials: false, // ✅ Bearer token auth (NO cookies)
 }));
+/* ==================================================
+ * ✅ SECURITY HEADERS (Fix COOP/COEP issues)
+ * ================================================== */
+app.use((req, res, next) => {
+    // Allow window.closed check from Firebase Auth
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+    next();
+});
 /* ==================================================
  * BODY PARSERS
  * ================================================== */

@@ -84,6 +84,25 @@ router.post("/student/google", async (req, res) => {
                 createdAt: firebase_1.FieldValue.serverTimestamp(),
                 updatedAt: firebase_1.FieldValue.serverTimestamp(),
             });
+            // ✅ Also create empty studentScores document
+            try {
+                const { collections } = require("../models/collections");
+                const admin = require("firebase-admin");
+                await collections.studentScores.doc(userId).set({
+                    displayScore: 0,
+                    codeSyncScore: 0,
+                    platformSkills: {},
+                    totalProblemsSolved: 0,
+                    breakdown: {},
+                    computedAt: firebase_1.FieldValue.serverTimestamp(),
+                    expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+                    version: 1,
+                    updatedAt: firebase_1.FieldValue.serverTimestamp(),
+                });
+            }
+            catch (scoreErr) {
+                console.error("[AUTH] Failed to create initial scores document:", scoreErr);
+            }
         }
         else {
             await studentRef.set({
@@ -212,7 +231,52 @@ router.post("/instructor/login", async (req, res) => {
     }
 });
 /* ----------------------------------------------------------
-   INSTRUCTOR FORGOT PASSWORD (stub)
+   CHANGE PASSWORD (POST /api/auth/change-password)
+   Requires auth middleware
+---------------------------------------------------------- */
+router.post("/change-password", async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    // Get user ID from auth header (assuming passed by middleware)
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
+    const token = authHeader.slice(7);
+    // Verify JWT and get user info
+    try {
+        const jwt = require("jsonwebtoken");
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret");
+        const userId = decoded.sub;
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: "Passwords required" });
+        }
+        if (newPassword.length < 6) {
+            return res.status(400).json({ message: "Password must be at least 6 characters" });
+        }
+        // Get instructor credentials
+        const instructorDoc = await instructorsCol.doc(userId).get();
+        if (!instructorDoc.exists) {
+            return res.status(401).json({ message: "Not an instructor" });
+        }
+        const { passwordHash } = instructorDoc.data();
+        // Verify current password
+        const ok = await bcryptjs_1.default.compare(currentPassword, passwordHash);
+        if (!ok) {
+            return res.status(401).json({ message: "Current password is incorrect" });
+        }
+        // Hash and update new password
+        const newHash = await bcryptjs_1.default.hash(newPassword, 10);
+        await instructorsCol.doc(userId).update({
+            passwordHash: newHash,
+        });
+        return res.json({ message: "Password changed successfully" });
+    }
+    catch (err) {
+        console.error("❌ /auth/change-password error:", err);
+        return res.status(500).json({ message: "Server error" });
+    }
+});
+/* ----------------------------------------------------------
    POST /api/auth/instructor/forgot-password
 ---------------------------------------------------------- */
 router.post("/instructor/forgot-password", async (req, res) => {

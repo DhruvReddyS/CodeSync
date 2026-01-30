@@ -83,6 +83,22 @@ router.post("/onboarding", auth_middleware_1.default, role_middleware_1.requireS
             dataToSet.createdAt = firebase_1.FieldValue.serverTimestamp();
         }
         await studentRef.set(dataToSet, { merge: true });
+        // ✅ Create empty scores document even if no handles
+        try {
+            const { computeAndSaveScores } = require("../services/studentScoresService");
+            const emptyStats = {
+                leetcode: null,
+                codeforces: null,
+                codechef: null,
+                atcoder: null,
+                hackerrank: null,
+                github: null,
+            };
+            await computeAndSaveScores(studentId, emptyStats);
+        }
+        catch (scoresErr) {
+            console.error("[STUDENT /onboarding] Failed to initialize scores:", scoresErr);
+        }
         const hasAnyHandle = !!codingHandles &&
             !!(codingHandles.leetcode ||
                 codingHandles.codeforces ||
@@ -311,13 +327,14 @@ router.get("/profile", auth_middleware_1.default, role_middleware_1.requireStude
             });
         }
         const data = snap.data() || {};
-        let onboardingCompleted = data.onboardingCompleted === true;
+        // Return actual onboarding status from database (don't auto-set it)
+        const onboardingCompleted = data.onboardingCompleted === true;
+        // If student hasn't completed onboarding, return 403
         if (!onboardingCompleted) {
-            onboardingCompleted = true;
-            await ref.set({
-                onboardingCompleted: true,
-                updatedAt: firebase_1.FieldValue.serverTimestamp(),
-            }, { merge: true });
+            return res.status(403).json({
+                message: "Please complete onboarding first",
+                onboardingRequired: true,
+            });
         }
         return res.json({
             id: studentId,

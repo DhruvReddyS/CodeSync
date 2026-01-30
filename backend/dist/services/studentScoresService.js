@@ -26,9 +26,9 @@ const SCORE_VERSION = 1; // Increment to invalidate all scores
  */
 async function computeAndSaveScores(studentId, platformStats) {
     // Import here to avoid circular dependency
-    const { computeCpScores } = require("../lib/scoringEngine");
+    const { computeCpScoresFromStats } = require("../lib/scoringEngine");
     // Compute from platform stats
-    const cpScores = computeCpScores(platformStats);
+    const cpScores = computeCpScoresFromStats(platformStats);
     // Structure for studentScores collection
     const studentScores = {
         displayScore: cpScores.displayScore || 0,

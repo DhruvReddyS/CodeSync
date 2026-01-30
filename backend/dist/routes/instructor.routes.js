@@ -274,14 +274,23 @@ router.get("/students", auth_middleware_1.default, role_middleware_1.requireInst
             return {
                 id: doc.id,
                 name: d.fullName || d.fullname || d.name || "Unnamed",
+                fullName: d.fullName || d.fullname || d.name || "Unnamed",
                 branch: d.branch ?? null,
                 section: d.section ?? null,
                 year: d.yearOfStudy ?? null, // ✅ Removed d.year fallback
+                yearOfStudy: d.yearOfStudy ?? null,
                 rollNumber: d.rollNumber ?? null,
                 codesyncScore: score,
+                displayScore: score,
+                totalProblemsSolved: cpScores?.totalProblemsSolved ?? 0,
+                cpScores: cpScores || {},
+                cpHandles: d.cpHandles || {},
+                onboardingCompleted: d.onboardingCompleted === true,
                 activeThisWeek: withinLastDays(lastActiveRaw, 7),
                 lastActiveAt: toISO(lastActiveRaw),
                 email: d.collegeEmail ?? d.personalEmail ?? d.email ?? null,
+                collegeEmail: d.collegeEmail ?? null,
+                personalEmail: d.personalEmail ?? null,
                 phone: d.phone ?? null,
             };
         }))
@@ -555,6 +564,270 @@ router.get("/student/:id/stats", auth_middleware_1.default, role_middleware_1.re
         return res
             .status(500)
             .json({ message: err.message || "Failed to load student stats" });
+    }
+});
+/* ==================================================
+ * ✅ GET /api/instructor/students
+ * ✅ Fetch students with filters
+ * ================================================== */
+router.get("/students", auth_middleware_1.default, role_middleware_1.requireInstructor, async (req, res) => {
+    try {
+        const { branch, section, year, searchQuery } = req.query;
+        let query = studentsCol;
+        if (branch)
+            query = query.where("branch", "==", branch);
+        if (section)
+            query = query.where("section", "==", section);
+        if (year)
+            query = query.where("yearOfStudy", "==", Number(year));
+        const snapshot = await query.get();
+        let students = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+        }));
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            students = students.filter((s) => {
+                const name = (s.fullName || s.fullname || s.name || "").toLowerCase();
+                const email = (s.email || s.collegeEmail || "").toLowerCase();
+                const rollNo = (s.rollNumber || "").toLowerCase();
+                return name.includes(q) || email.includes(q) || rollNo.includes(q);
+            });
+        }
+        return res.json({ students });
+    }
+    catch (err) {
+        return res
+            .status(500)
+            .json({ message: err.message || "Failed to fetch students" });
+    }
+});
+/* ==================================================
+ * ✅ POST /api/instructor/students
+ * ✅ Add a new student
+ * ================================================== */
+router.post("/students", auth_middleware_1.default, role_middleware_1.requireInstructor, async (req, res) => {
+    try {
+        const { fullName, rollNumber, branch, section, yearOfStudy, collegeEmail, personalEmail, } = req.body;
+        if (!fullName) {
+            return res.status(400).json({ message: "Full name is required" });
+        }
+        // Hash password if needed - for now just create with basic auth
+        const docRef = studentsCol.doc();
+        await docRef.set({
+            fullName,
+            rollNumber: rollNumber || null,
+            branch: branch || null,
+            section: section || null,
+            yearOfStudy: yearOfStudy ? Number(yearOfStudy) : null,
+            collegeEmail: collegeEmail || null,
+            personalEmail: personalEmail || null,
+            cpHandles: {},
+            cpScores: {
+                displayScore: 0,
+                platformSkills: {},
+            },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
+        return res.json({ message: "Student added successfully", id: docRef.id });
+    }
+    catch (err) {
+        return res
+            .status(500)
+            .json({ message: err.message || "Failed to add student" });
+    }
+});
+/* ==================================================
+ * ✅ DELETE /api/instructor/students/:studentId
+ * ✅ Delete a student
+ * ================================================== */
+router.delete("/students/:studentId", auth_middleware_1.default, role_middleware_1.requireInstructor, async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        await studentsCol.doc(studentId).delete();
+        return res.json({ message: "Student deleted successfully" });
+    }
+    catch (err) {
+        return res
+            .status(500)
+            .json({ message: err.message || "Failed to delete student" });
+    }
+});
+/* ==================================================
+ * ✅ GET /api/instructor/analytics
+ * ✅ Get analytics data for cohort
+ * ================================================== */
+router.get("/analytics", auth_middleware_1.default, role_middleware_1.requireInstructor, async (req, res) => {
+    try {
+        const snapshot = await studentsCol.get();
+        const students = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+        }));
+        const totalStudents = students.length;
+        const scores = students
+            .map((s) => s.cpScores?.displayScore || 0)
+            .filter((s) => s > 0);
+        const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+        // Score distribution
+        const scoreDistribution = [
+            { range: "0-20", students: students.filter((s) => (s.cpScores?.displayScore || 0) < 20).length },
+            { range: "20-40", students: students.filter((s) => { const sc = s.cpScores?.displayScore || 0; return sc >= 20 && sc < 40; }).length },
+            { range: "40-60", students: students.filter((s) => { const sc = s.cpScores?.displayScore || 0; return sc >= 40 && sc < 60; }).length },
+            { range: "60-80", students: students.filter((s) => { const sc = s.cpScores?.displayScore || 0; return sc >= 60 && sc < 80; }).length },
+            { range: "80-100", students: students.filter((s) => (s.cpScores?.displayScore || 0) >= 80).length },
+        ];
+        // Platform stats
+        const platformStats = [
+            {
+                name: "LeetCode",
+                engaged: students.filter((s) => s.cpHandles?.leetcode).length,
+                inactive: students.filter((s) => !s.cpHandles?.leetcode).length,
+            },
+            {
+                name: "Codeforces",
+                engaged: students.filter((s) => s.cpHandles?.codeforces).length,
+                inactive: students.filter((s) => !s.cpHandles?.codeforces).length,
+            },
+            {
+                name: "CodeChef",
+                engaged: students.filter((s) => s.cpHandles?.codechef).length,
+                inactive: students.filter((s) => !s.cpHandles?.codechef).length,
+            },
+            {
+                name: "GitHub",
+                engaged: students.filter((s) => s.cpHandles?.github).length,
+                inactive: students.filter((s) => !s.cpHandles?.github).length,
+            },
+        ];
+        // Weekly progress (mock)
+        const weeklyProgress = [
+            { week: "Week 1", avgScore: avgScore * 0.7 },
+            { week: "Week 2", avgScore: avgScore * 0.75 },
+            { week: "Week 3", avgScore: avgScore * 0.85 },
+            { week: "Week 4", avgScore: avgScore * 0.95 },
+            { week: "Week 5", avgScore: avgScore },
+        ];
+        // Branch comparison
+        const branchMap = new Map();
+        students.forEach((s) => {
+            const branch = s.branch || "Unknown";
+            if (!branchMap.has(branch))
+                branchMap.set(branch, []);
+            branchMap.get(branch).push(s.cpScores?.displayScore || 0);
+        });
+        const branchComparison = Array.from(branchMap.entries()).map(([branch, scores]) => ({
+            branch,
+            avgScore: scores.reduce((a, b) => a + b, 0) / scores.length,
+        }));
+        // Top performers
+        const topPerformers = students
+            .sort((a, b) => (b.cpScores?.displayScore || 0) - (a.cpScores?.displayScore || 0))
+            .slice(0, 5)
+            .map((s) => ({
+            name: s.fullName || s.fullname || s.name || "Unknown",
+            score: s.cpScores?.displayScore || 0,
+        }));
+        return res.json({
+            scoreDistribution,
+            platformStats,
+            weeklyProgress,
+            branchComparison,
+            totalStudents,
+            avgScore: Math.round(avgScore * 10) / 10,
+            topPerformers,
+        });
+    }
+    catch (err) {
+        return res
+            .status(500)
+            .json({ message: err.message || "Failed to fetch analytics" });
+    }
+});
+/* ==================================================
+ * ✅ POST /api/instructor/delete-account
+ * ✅ Delete instructor account
+ * ================================================== */
+router.post("/delete-account", auth_middleware_1.default, role_middleware_1.requireInstructor, async (req, res) => {
+    try {
+        const userId = req.user?.sub;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        // Delete instructor credentials
+        const instructorCol = require("../models/collections").collections.instructors;
+        await instructorCol.doc(userId).delete();
+        // Delete user document
+        const usersCol = require("../models/collections").collections.users;
+        await usersCol.doc(userId).delete();
+        return res.json({ message: "Account deleted successfully" });
+    }
+    catch (err) {
+        return res
+            .status(500)
+            .json({ message: err.message || "Failed to delete account" });
+    }
+});
+/* ==================================================
+ * ✅ POST /api/instructor/notification-settings
+ * ✅ Save notification preferences
+ * ================================================== */
+router.post("/notification-settings", auth_middleware_1.default, role_middleware_1.requireInstructor, async (req, res) => {
+    try {
+        const userId = req.user?.sub;
+        const { emailNotifications, pushNotifications, frequency } = req.body;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const usersCol = require("../models/collections").collections.users;
+        await usersCol.doc(userId).update({
+            notificationSettings: {
+                emailNotifications: !!emailNotifications,
+                pushNotifications: !!pushNotifications,
+                frequency: frequency || "daily",
+            },
+        });
+        return res.json({ message: "Notification settings saved" });
+    }
+    catch (err) {
+        return res
+            .status(500)
+            .json({ message: err.message || "Failed to save settings" });
+    }
+});
+/* ==================================================
+ * ✅ POST /api/instructor/send-notification
+ * ✅ Send notification to students
+ * ================================================== */
+router.post("/send-notification", auth_middleware_1.default, role_middleware_1.requireInstructor, async (req, res) => {
+    try {
+        const userId = req.user?.sub;
+        const { title, message, recipientIds } = req.body;
+        if (!userId || !title || !message) {
+            return res.status(400).json({ message: "Missing required fields" });
+        }
+        // Create notification document
+        const notificationsCol = require("../models/collections").collections.notifications ||
+            require("../config/firebase").db.collection("notifications");
+        const notifRef = notificationsCol.doc();
+        await notifRef.set({
+            senderId: userId,
+            title,
+            message,
+            recipients: recipientIds || [],
+            createdAt: new Date(),
+            read: false,
+        });
+        return res.json({
+            message: "Notification sent successfully",
+            notificationId: notifRef.id,
+        });
+    }
+    catch (err) {
+        return res
+            .status(500)
+            .json({ message: err.message || "Failed to send notification" });
     }
 });
 /* ==================================================

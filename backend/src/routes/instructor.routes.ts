@@ -711,7 +711,7 @@ router.get(
       if (year) query = query.where("yearOfStudy", "==", Number(year));
 
       const snapshot = await query.get();
-      let students = snapshot.docs.map((doc) => ({
+      let students = snapshot.docs.map((doc: any) => ({
         id: doc.id,
         ...doc.data(),
       }));
