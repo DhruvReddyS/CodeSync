@@ -339,6 +339,9 @@ export function computeCpScoresFromStats(platformStats: RawPlatformStatsMap): Cp
   };
 }
 
+// Backward-compat alias for older imports expecting computeCpScores
+export const computeCpScores = computeCpScoresFromStats;
+
 /* ------------------------------------------------------------------
  * SAVE TO FIRESTORE
  * ------------------------------------------------------------------ */

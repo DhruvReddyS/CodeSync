@@ -8,7 +8,7 @@
 import { collections, StudentScores, PlatformProfile } from "../models/collections";
 import { firestore, FieldValue } from "../config/firebase";
 import admin from "firebase-admin";
-import { PlatformId, CpScores } from "../lib/scoringEngine";
+import { PlatformId, CpScores, computeCpScoresFromStats } from "../lib/scoringEngine";
 
 const SCORE_CACHE_TTL_DAYS = 7; // Recompute scores every 7 days
 const SCORE_VERSION = 1; // Increment to invalidate all scores
@@ -21,9 +21,6 @@ export async function computeAndSaveScores(
   studentId: string,
   platformStats: Record<PlatformId, any | null>
 ): Promise<StudentScores> {
-  // Import here to avoid circular dependency
-  const { computeCpScoresFromStats } = require("../lib/scoringEngine");
-
   // Compute from platform stats
   const cpScores = computeCpScoresFromStats(platformStats);
 
@@ -33,7 +30,7 @@ export async function computeAndSaveScores(
     codeSyncScore: cpScores.codeSyncScore || 0,
     platformSkills: cpScores.platformSkills || {},
     totalProblemsSolved: cpScores.totalProblemsSolved || 0,
-    breakdown: cpScores.breakdown || {},
+    breakdown: (cpScores.breakdown as any) || {},
     computedAt: FieldValue.serverTimestamp(),
     expiresAt: admin.firestore.Timestamp.fromDate(
       new Date(Date.now() + SCORE_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000)
