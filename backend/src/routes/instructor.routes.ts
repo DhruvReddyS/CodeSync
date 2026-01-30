@@ -704,7 +704,7 @@ router.get(
   async (req: AuthedReq, res: Response) => {
     try {
       const { branch, section, year, searchQuery } = req.query;
-      let query = studentsCol;
+      let query: any = studentsCol;
 
       if (branch) query = query.where("branch", "==", branch);
       if (section) query = query.where("section", "==", section);
@@ -924,7 +924,7 @@ router.post(
   requireInstructor,
   async (req: AuthedReq, res: Response) => {
     try {
-      const userId = req.user?.id;
+      const userId = req.user?.sub;
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -956,7 +956,7 @@ router.post(
   requireInstructor,
   async (req: AuthedReq, res: Response) => {
     try {
-      const userId = req.user?.id;
+      const userId = req.user?.sub;
       const { emailNotifications, pushNotifications, frequency } = req.body;
 
       if (!userId) {
@@ -991,7 +991,7 @@ router.post(
   requireInstructor,
   async (req: AuthedReq, res: Response) => {
     try {
-      const userId = req.user?.id;
+      const userId = req.user?.sub;
       const { title, message, recipientIds } = req.body;
 
       if (!userId || !title || !message) {
