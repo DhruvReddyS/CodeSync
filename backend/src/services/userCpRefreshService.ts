@@ -359,7 +359,6 @@ export async function refreshStudentCPData(
 
   // 2) Load full cpProfiles → compute cpScores → save to studentScores collection ✅
   const platformStats = await loadPlatformStatsMap(studentId);
-  const cpScores = computeCpScoresFromStats(platformStats);
 
   // ✅ Write scores to dedicated studentScores collection (not to student doc)
   await computeAndSaveScores(studentId, platformStats);

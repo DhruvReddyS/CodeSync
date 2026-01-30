@@ -114,16 +114,12 @@ router.post(
       const isNew = !existingSnap.exists;
 
       const dataToSet: Record<string, any> = {
-        // Removed: userId field (use doc ID instead) ✅
-
         fullName,
         collegeEmail: collegeEmail || null,
         personalEmail: personalEmail || null,
         phone: phone || null,
         branch,
         yearOfStudy,
-        // Removed: duplicate 'year' field ✅
-
         section,
         rollNumber,
         graduationYear: graduationYear || null,
@@ -140,7 +136,7 @@ router.post(
         profile: profile || {},
 
         onboardingCompleted: true,
-        status: "active", // ✅ NEW: explicit status
+        status: "active",
         updatedAt: FieldValue.serverTimestamp(),
       };
 
@@ -148,9 +144,11 @@ router.post(
         dataToSet.createdAt = FieldValue.serverTimestamp();
       }
 
+      // Step 1: Save student profile
       await studentRef.set(dataToSet, { merge: true });
+      console.log(`[STUDENT /onboarding] Saved profile for student=${studentId}`);
 
-      // ✅ Create empty scores document even if no handles
+      // Step 2: Initialize scores document
       try {
         const { computeAndSaveScores } = require("../services/studentScoresService");
         const emptyStats: Record<string, any> = {
@@ -162,10 +160,13 @@ router.post(
           github: null,
         };
         await computeAndSaveScores(studentId, emptyStats);
+        console.log(`[STUDENT /onboarding] Initialized scores for student=${studentId}`);
       } catch (scoresErr) {
         console.error("[STUDENT /onboarding] Failed to initialize scores:", scoresErr);
+        // Don't fail onboarding if scores init fails
       }
 
+      // Step 3: Trigger scraping if handles provided (async, don't wait)
       const hasAnyHandle =
         !!codingHandles &&
         !!(
@@ -178,17 +179,21 @@ router.post(
         );
 
       if (hasAnyHandle) {
-        try {
-          console.log(
-            `[STUDENT /onboarding] triggering initial CP refresh for student=${studentId}`
-          );
-          await refreshStudentCPData(studentId);
-        } catch (cpErr) {
-          console.error("[STUDENT /onboarding] CP refresh failed:", cpErr);
-        }
+        // Start scraping in background (don't wait for it)
+        refreshStudentCPData(studentId)
+          .then(() => {
+            console.log(`[STUDENT /onboarding] ✅ CP refresh completed for student=${studentId}`);
+          })
+          .catch((err) => {
+            console.error(`[STUDENT /onboarding] ⚠️  CP refresh failed for student=${studentId}:`, err);
+          });
       }
 
-      return res.json({ message: "Onboarding completed" });
+      return res.json({ 
+        message: "Onboarding completed successfully",
+        studentId,
+        hasHandles: hasAnyHandle,
+      });
     } catch (err: any) {
       console.error("[STUDENT /onboarding] error:", err);
       return res

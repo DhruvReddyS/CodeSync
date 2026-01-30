@@ -55,14 +55,12 @@ router.post("/onboarding", auth_middleware_1.default, role_middleware_1.requireS
         const existingSnap = await studentRef.get();
         const isNew = !existingSnap.exists;
         const dataToSet = {
-            // Removed: userId field (use doc ID instead) ✅
             fullName,
             collegeEmail: collegeEmail || null,
             personalEmail: personalEmail || null,
             phone: phone || null,
             branch,
             yearOfStudy,
-            // Removed: duplicate 'year' field ✅
             section,
             rollNumber,
             graduationYear: graduationYear || null,
@@ -76,14 +74,16 @@ router.post("/onboarding", auth_middleware_1.default, role_middleware_1.requireS
             },
             profile: profile || {},
             onboardingCompleted: true,
-            status: "active", // ✅ NEW: explicit status
+            status: "active",
             updatedAt: firebase_1.FieldValue.serverTimestamp(),
         };
         if (isNew) {
             dataToSet.createdAt = firebase_1.FieldValue.serverTimestamp();
         }
+        // Step 1: Save student profile
         await studentRef.set(dataToSet, { merge: true });
-        // ✅ Create empty scores document even if no handles
+        console.log(`[STUDENT /onboarding] Saved profile for student=${studentId}`);
+        // Step 2: Initialize scores document
         try {
             const { computeAndSaveScores } = require("../services/studentScoresService");
             const emptyStats = {
@@ -95,10 +95,13 @@ router.post("/onboarding", auth_middleware_1.default, role_middleware_1.requireS
                 github: null,
             };
             await computeAndSaveScores(studentId, emptyStats);
+            console.log(`[STUDENT /onboarding] Initialized scores for student=${studentId}`);
         }
         catch (scoresErr) {
             console.error("[STUDENT /onboarding] Failed to initialize scores:", scoresErr);
+            // Don't fail onboarding if scores init fails
         }
+        // Step 3: Trigger scraping if handles provided (async, don't wait)
         const hasAnyHandle = !!codingHandles &&
             !!(codingHandles.leetcode ||
                 codingHandles.codeforces ||
@@ -107,15 +110,20 @@ router.post("/onboarding", auth_middleware_1.default, role_middleware_1.requireS
                 codingHandles.hackerrank ||
                 codingHandles.github);
         if (hasAnyHandle) {
-            try {
-                console.log(`[STUDENT /onboarding] triggering initial CP refresh for student=${studentId}`);
-                await (0, userCpRefreshService_1.refreshStudentCPData)(studentId);
-            }
-            catch (cpErr) {
-                console.error("[STUDENT /onboarding] CP refresh failed:", cpErr);
-            }
+            // Start scraping in background (don't wait for it)
+            (0, userCpRefreshService_1.refreshStudentCPData)(studentId)
+                .then(() => {
+                console.log(`[STUDENT /onboarding] ✅ CP refresh completed for student=${studentId}`);
+            })
+                .catch((err) => {
+                console.error(`[STUDENT /onboarding] ⚠️  CP refresh failed for student=${studentId}:`, err);
+            });
         }
-        return res.json({ message: "Onboarding completed" });
+        return res.json({
+            message: "Onboarding completed successfully",
+            studentId,
+            hasHandles: hasAnyHandle,
+        });
     }
     catch (err) {
         console.error("[STUDENT /onboarding] error:", err);

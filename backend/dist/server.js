@@ -104,10 +104,8 @@ if (fs_1.default.existsSync(clientDist)) {
     console.log("🟢 Serving frontend from:", clientDist);
     app.use(express_1.default.static(clientDist));
     // IMPORTANT: keep this AFTER /api routes
-    app.get("/*", (req, res) => {
-        if (req.path.startsWith("/api")) {
-            return res.status(404).json({ message: "API route not found" });
-        }
+    // Use regex pattern for catch-all SPA fallback
+    app.get(/^\/(?!api\/)/, (req, res) => {
         return res.sendFile(path_1.default.join(clientDist, "index.html"));
     });
 }
