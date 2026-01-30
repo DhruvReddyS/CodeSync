@@ -1,6 +1,6 @@
 import { FieldValue } from "../config/firebase";
 import { PlatformId } from "../lib/scoringEngine";
-import { collections } from "../models/collections";
+import { collections, CpHandles, RawPlatformStatsMap } from "../models/collections";
 import { computeAndSaveScores } from "./studentScoresService";
 
 // SCRAPERS (already in your project)

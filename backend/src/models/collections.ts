@@ -29,12 +29,34 @@ export interface BaseUser {
   name: string;
   role: "student" | "instructor";
   photoURL?: string;
-  firebaseUid?: string; // Only for OAuth users
+  firebaseUid?: string | null; // Only for OAuth users; null for instructors
   status: "active" | "inactive" | "deleted";
   createdAt: FirebaseFirestore.FieldValue | FirebaseFirestore.Timestamp;
   updatedAt: FirebaseFirestore.FieldValue | FirebaseFirestore.Timestamp;
   deletedAt?: FirebaseFirestore.Timestamp | null;
 }
+
+/**
+ * Coding Platform Handles
+ * Maps platform names to user handles
+ */
+export type CpHandles = {
+  leetcode?: string | null;
+  codeforces?: string | null;
+  codechef?: string | null;
+  github?: string | null;
+  hackerrank?: string | null;
+  atcoder?: string | null;
+};
+
+/**
+ * Raw Platform Stats Map
+ * Maps platform names to scraped profile data
+ */
+export type RawPlatformStatsMap = Record<
+  "leetcode" | "codeforces" | "codechef" | "github" | "hackerrank" | "atcoder",
+  any | null
+>;
 
 /**
  * Student profile document
