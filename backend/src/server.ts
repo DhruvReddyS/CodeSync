@@ -119,7 +119,7 @@ if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
 
   // IMPORTANT: keep this AFTER /api routes
-  app.get("*", (req, res) => {
+  app.get("/*", (req, res) => {
     if (req.path.startsWith("/api")) {
       return res.status(404).json({ message: "API route not found" });
     }
