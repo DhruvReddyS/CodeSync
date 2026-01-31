@@ -352,6 +352,8 @@ router.get(
     try {
       const rawLimit = (req.query?.limit as string) || "50";
       const limit = Number(rawLimit) || 50;
+      const viewerId = req.user?.sub || null;
+      const viewerRole = req.user?.role || null;
 
       // Query studentScores collection for leaderboard (fast)
       const scoresSnap = await collections.studentScores
@@ -381,6 +383,11 @@ router.get(
           avatarUrl: sd.profile?.avatarUrl || sd.avatarUrl || null,
           cpScores: scores,
           cpHandles: sd.cpHandles || {},
+          isProfilePrivate: sd.isProfilePrivate === true,
+          canViewProfile:
+            viewerRole === "student"
+              ? !(sd.isProfilePrivate === true && viewerId !== studentId)
+              : true,
         };
       });
 
@@ -418,6 +425,11 @@ router.get(
       }
 
       const data = snap.data() || {};
+      const isPrivate = data.isProfilePrivate === true;
+
+      if (isPrivate && req.user?.role === "student" && req.user.sub !== targetId) {
+        return res.status(403).json({ message: "Student profile is private" });
+      }
 
       const cpScores = await getStudentScores(targetId, true);
       const platformStats = await loadPlatformStatsMap(targetId);
@@ -439,6 +451,7 @@ router.get(
 
           profile: data.profile || {},
           cpHandles: data.cpHandles || {},
+          isProfilePrivate: isPrivate,
         },
         cpScores,
         platformStats,
@@ -502,6 +515,7 @@ router.get(
 
         cpHandles: data.cpHandles || {},
         profile: data.profile || {},
+        isProfilePrivate: data.isProfilePrivate === true,
 
         onboardingCompleted: true,
       });
@@ -596,6 +610,7 @@ router.put(
         graduationYear,
         cpHandles,
         profile,
+        isProfilePrivate,
       } = req.body as any;
 
       if (phone && String(phone).replace(/\D/g, "").length < 8) {
@@ -648,6 +663,10 @@ router.put(
         updateDoc.profile = profile || {};
       }
 
+      if (isProfilePrivate !== undefined) {
+        updateDoc.isProfilePrivate = Boolean(isProfilePrivate);
+      }
+
       await ref.set(updateDoc, { merge: true });
 
       const after = (await ref.get()).data() || {};
@@ -667,6 +686,7 @@ router.put(
 
         cpHandles: after.cpHandles || {},
         profile: after.profile || {},
+        isProfilePrivate: after.isProfilePrivate === true,
 
         onboardingCompleted: true,
       });

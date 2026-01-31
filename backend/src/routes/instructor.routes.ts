@@ -353,7 +353,7 @@ router.get(
 
             branch: d.branch ?? null,
             section: d.section ?? null,
-            year: d.yearOfStudy ?? null, // ✅ Removed d.year fallback
+            year: d.yearOfStudy ?? null, // ? Removed d.year fallback
             yearOfStudy: d.yearOfStudy ?? null,
             rollNumber: d.rollNumber ?? null,
 
@@ -374,19 +374,36 @@ router.get(
             phone: d.phone ?? null,
           };
         })
-      )
-        .then((students) =>
-          students
-            .filter((s) => {
-              if (!q) return true;
-              const hay =
-                `${s.name} ${s.id} ${s.rollNumber ?? ""} ${s.branch ?? ""} ${s.section ?? ""} ${s.year ?? ""}`.toLowerCase();
-              return hay.includes(q);
-            })
-            .sort((a, b) => (b.codesyncScore ?? 0) - (a.codesyncScore ?? 0))
+      );
+
+      const filtered = students.filter((s) => {
+        if (!q) return true;
+        const hay =
+          `${s.name} ${s.id} ${s.rollNumber ?? ""} ${s.branch ?? ""} ${s.section ?? ""} ${s.year ?? ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+      const rankOrder = [...filtered].sort(
+        (a, b) =>
+          (b.displayScore ?? b.codesyncScore ?? 0) -
+          (a.displayScore ?? a.codesyncScore ?? 0)
+      );
+      const rankMap = new Map();
+      rankOrder.forEach((s, i) => rankMap.set(s.id, i + 1));
+
+      const ranked = filtered
+        .map((s) => ({ ...s, rank: rankMap.get(s.id) ?? null }))
+        .sort(
+          (a, b) =>
+            (b.displayScore ?? b.codesyncScore ?? 0) -
+            (a.displayScore ?? a.codesyncScore ?? 0)
         );
 
       return res.json({
+        students: ranked,
+        lastSyncAt: new Date().toISOString(),
+      });
+return res.json({
         students,
         lastSyncAt: new Date().toISOString(),
       });
@@ -587,16 +604,36 @@ router.get(
               },
           };
         })
-      ).then((list) =>
-        list.filter((s) => {
-          if (!q) return true;
-          const hay =
-            `${s.name} ${s.id} ${s.branch ?? ""} ${s.section ?? ""} ${s.year ?? ""} ${s.rollNumber ?? ""}`.toLowerCase();
-          return hay.includes(q);
-        })
       );
 
+      const filtered = students.filter((s) => {
+        if (!q) return true;
+        const hay =
+          `${s.name} ${s.id} ${s.branch ?? ""} ${s.section ?? ""} ${s.year ?? ""} ${s.rollNumber ?? ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+      const rankOrder = [...filtered].sort(
+        (a, b) =>
+          (b.displayScore ?? b.codesyncScore ?? 0) -
+          (a.displayScore ?? a.codesyncScore ?? 0)
+      );
+      const rankMap = new Map();
+      rankOrder.forEach((s, i) => rankMap.set(s.id, i + 1));
+
+      const ranked = filtered
+        .map((s) => ({ ...s, rank: rankMap.get(s.id) ?? null }))
+        .sort(
+          (a, b) =>
+            (b.displayScore ?? b.codesyncScore ?? 0) -
+            (a.displayScore ?? a.codesyncScore ?? 0)
+        );
+
       return res.json({
+        students: ranked,
+        lastSyncAt: new Date().toISOString(),
+      });
+return res.json({
         students,
         lastSyncAt: new Date().toISOString(),
       });

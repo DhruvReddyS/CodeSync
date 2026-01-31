@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo } from "react";
+﻿import React, { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, ScatterChart, Scatter } from "recharts";
 import apiClient from "../../lib/apiClient";
 import { RiRefreshLine, RiInformationLine, RiBarChartHorizontalLine, RiGroupLine, RiCheckDoubleLine, RiFireLine } from "react-icons/ri";
 
@@ -12,6 +12,10 @@ type Student = {
   totalProblemsSolved?: number;
   cpScores?: { platformSkills?: Record<string, number> };
   onboardingCompleted?: boolean;
+  branch?: string;
+  section?: string;
+  year?: string | number;
+  cpHandles?: Record<string, string>;
 };
 
 export default function InstructorAnalyticsPage() {
@@ -27,11 +31,15 @@ export default function InstructorAnalyticsPage() {
       const data = (response.data?.students || response.data || []).map((s: any) => ({
         id: s.id || s._id || s.uid,
         fullName: s.fullName || s.fullname || s.name,
-        codesyncScore: Number(s.codesyncScore || s.displayScore || 0),
+        codesyncScore: Number(s.displayScore || s.codesyncScore || 0),
         displayScore: Number(s.displayScore || s.codesyncScore || 0),
         totalProblemsSolved: Number(s.totalProblemsSolved || s.totalSolved || 0),
         cpScores: s.cpScores || {},
         onboardingCompleted: !!s.onboardingCompleted,
+        branch: s.branch,
+        section: s.section,
+        year: s.yearOfStudy || s.year,
+        cpHandles: s.cpHandles || {},
       }));
       setStudents(data);
     } catch (e: any) {
@@ -55,7 +63,7 @@ export default function InstructorAnalyticsPage() {
       "81-100": 0,
     };
     students.forEach((s) => {
-      const score = s.codesyncScore || 0;
+      const score = s.displayScore || s.codesyncScore || 0;
       if (score <= 20) ranges["0-20"]++;
       else if (score <= 40) ranges["21-40"]++;
       else if (score <= 60) ranges["41-60"]++;
@@ -65,17 +73,9 @@ export default function InstructorAnalyticsPage() {
     return Object.entries(ranges).map(([range, count]) => ({ range, count }));
   }, [students]);
 
-  // Top performers
-  const topPerformers = useMemo(() => {
-    return students
-      .slice()
-      .sort((a, b) => (b.codesyncScore || 0) - (a.codesyncScore || 0))
-      .slice(0, 5);
-  }, [students]);
-
   // Overall stats
   const stats = useMemo(() => {
-    const avgScore = students.length ? students.reduce((acc, s) => acc + (s.codesyncScore || 0), 0) / students.length : 0;
+    const avgScore = students.length ? students.reduce((acc, s) => acc + (s.displayScore || s.codesyncScore || 0), 0) / students.length : 0;
     const totalSolved = students.reduce((acc, s) => acc + (s.totalProblemsSolved || 0), 0);
     const onboarded = students.filter((s) => s.onboardingCompleted).length;
     const active = students.length;
@@ -89,7 +89,30 @@ export default function InstructorAnalyticsPage() {
     };
   }, [students]);
 
-  const COLORS = ["#fbbf24", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899"];
+  const PLATFORM_KEYS = ["leetcode", "codeforces", "codechef", "github", "hackerrank", "atcoder"] as const;
+
+  const platformAdoption = useMemo(() => {
+    return PLATFORM_KEYS.map((p) => {
+      const count = students.filter((s) => s.cpHandles?.[p]).length;
+      return { platform: p, count };
+    });
+  }, [students]);
+
+  const platformSkillAvg = useMemo(() => {
+    return PLATFORM_KEYS.map((p) => {
+      const vals = students.map((s) => s.cpScores?.platformSkills?.[p] || 0);
+      const avg = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
+      return { platform: p, avg: Math.round(avg) };
+    });
+  }, [students]);
+
+  const scoreVsSolved = useMemo(() => {
+    return students.map((s) => ({
+      name: (s.fullName || "Student").split(" ")[0],
+      solved: s.totalProblemsSolved || 0,
+      score: s.displayScore || s.codesyncScore || 0,
+    }));
+  }, [students]);
 
   return (
     <div className="w-full px-4 py-8 md:px-8">
@@ -203,7 +226,7 @@ export default function InstructorAnalyticsPage() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={scoreDistribution} margin={{ top: 16, right: 24, left: 0, bottom: 16 }}>
+                <AreaChart data={scoreDistribution} margin={{ top: 16, right: 24, left: 0, bottom: 16 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.1)" />
                   <XAxis dataKey="range" stroke="rgba(100,116,139,0.6)" style={{ fontSize: "12px" }} />
                   <YAxis stroke="rgba(100,116,139,0.6)" style={{ fontSize: "12px" }} />
@@ -215,14 +238,20 @@ export default function InstructorAnalyticsPage() {
                     }}
                     cursor={{ fill: "rgba(59, 130, 246, 0.05)" }}
                   />
-                  <Bar dataKey="count" fill="url(#colorGradient)" radius={[12, 12, 0, 0]} />
                   <defs>
-                    <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" />
-                      <stop offset="100%" stopColor="#1e40af" />
+                    <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="#1e3a8a" stopOpacity={0.2} />
                     </linearGradient>
                   </defs>
-                </BarChart>
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    stroke="#60a5fa"
+                    strokeWidth={2}
+                    fill="url(#scoreGradient)"
+                  />
+                </AreaChart>
               </ResponsiveContainer>
             )}
           </motion.div>
@@ -255,9 +284,12 @@ export default function InstructorAnalyticsPage() {
                       outerRadius={100}
                       paddingAngle={3}
                       dataKey="value"
+                      startAngle={90}
+                      endAngle={-270}
+                      cornerRadius={12}
                     >
-                      <Cell fill="#10b981" />
-                      <Cell fill="#f59e0b" />
+                      <Cell fill="#10b981" stroke="#0f172a" strokeWidth={2} />
+                      <Cell fill="#f59e0b" stroke="#0f172a" strokeWidth={2} />
                     </Pie>
                     <Tooltip
                       contentStyle={{
@@ -282,46 +314,93 @@ export default function InstructorAnalyticsPage() {
             )}
           </motion.div>
 
-          {/* Top Performers */}
+        </div>
+
+        {/* Extra Graphs */}
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <motion.div
             whileHover={{ y: -2 }}
-            className="rounded-3xl border border-slate-800/60 bg-gradient-to-b from-slate-900/50 to-slate-950/30 p-6 lg:col-span-2"
+            className="rounded-3xl border border-slate-800/60 bg-gradient-to-b from-slate-900/50 to-slate-950/30 p-6"
           >
-            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-              <div className="w-1 h-5 rounded-full bg-gradient-to-b from-amber-400 to-amber-600" />
-              Top Performers
+            <h2 className="text-lg font-semibold text-slate-100 mb-4">
+              Platform Adoption
             </h2>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={platformAdoption}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.1)" />
+                <XAxis dataKey="platform" stroke="rgba(100,116,139,0.6)" />
+                <YAxis stroke="rgba(100,116,139,0.6)" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(15, 23, 42, 0.95)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    borderRadius: "12px",
+                  }}
+                />
+                <defs>
+                  <linearGradient id="platformAdoptionGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#38bdf8" />
+                    <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.3} />
+                  </linearGradient>
+                </defs>
+                <Bar dataKey="count" fill="url(#platformAdoptionGradient)" radius={[10, 10, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </motion.div>
 
-            {loading ? (
-              <div className="mt-6 h-48 flex items-center justify-center text-slate-400">
-                <RiRefreshLine className="animate-spin text-2xl" />
-              </div>
-            ) : topPerformers.length === 0 ? (
-              <div className="mt-6 text-center text-slate-400">No students yet</div>
-            ) : (
-              <div className="mt-6 space-y-3">
-                {topPerformers.map((s, idx) => (
-                  <motion.div
-                    key={s.id}
-                    whileHover={{ x: 4 }}
-                    className="flex items-center gap-4 rounded-2xl border border-slate-800/40 bg-slate-900/20 p-4"
-                  >
-                    <div className="text-2xl font-bold text-slate-400 w-8">
-                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium text-slate-100">{s.fullName || "Unknown"}</div>
-                      <div className="text-sm text-slate-500">
-                        {s.totalProblemsSolved || 0} problems solved
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 rounded-xl border border-amber-800/40 bg-amber-900/20 px-3 py-2">
-                      <span className="font-semibold text-amber-100">{(s.codesyncScore || 0).toFixed(0)}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
+          <motion.div
+            whileHover={{ y: -2 }}
+            className="rounded-3xl border border-slate-800/60 bg-gradient-to-b from-slate-900/50 to-slate-950/30 p-6"
+          >
+            <h2 className="text-lg font-semibold text-slate-100 mb-4">
+              Avg Platform Skill
+            </h2>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={platformSkillAvg}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.1)" />
+                <XAxis dataKey="platform" stroke="rgba(100,116,139,0.6)" />
+                <YAxis stroke="rgba(100,116,139,0.6)" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(15, 23, 42, 0.95)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    borderRadius: "12px",
+                  }}
+                />
+                <defs>
+                  <linearGradient id="platformSkillGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#a78bfa" />
+                    <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.35} />
+                  </linearGradient>
+                </defs>
+                <Bar dataKey="avg" fill="url(#platformSkillGradient)" radius={[10, 10, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </motion.div>
+
+          <motion.div
+            whileHover={{ y: -2 }}
+            className="rounded-3xl border border-slate-800/60 bg-gradient-to-b from-slate-900/50 to-slate-950/30 p-6"
+          >
+            <h2 className="text-lg font-semibold text-slate-100 mb-4">
+              Score vs Solved
+            </h2>
+            <ResponsiveContainer width="100%" height={260}>
+              <ScatterChart margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="rgba(100,116,139,0.12)" />
+                <XAxis dataKey="solved" name="Solved" stroke="rgba(100,116,139,0.6)" />
+                <YAxis dataKey="score" name="Score" stroke="rgba(100,116,139,0.6)" />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  contentStyle={{
+                    backgroundColor: "rgba(15, 23, 42, 0.95)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    borderRadius: "12px",
+                  }}
+                />
+                <Scatter data={scoreVsSolved} fill="#22d3ee" stroke="#0ea5e9" />
+              </ScatterChart>
+            </ResponsiveContainer>
           </motion.div>
         </div>
 

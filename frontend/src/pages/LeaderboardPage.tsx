@@ -55,6 +55,8 @@ type LeaderboardEntry = {
   avatarUrl?: string | null;
   cpScores: CpScores | null;
   cpHandles: Partial<Record<PlatformKey, string>>;
+  isProfilePrivate?: boolean;
+  canViewProfile?: boolean;
 };
 
 type ApiResponse = {
@@ -100,6 +102,7 @@ const LeaderboardPage: React.FC = () => {
   const [filtered, setFiltered] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState<string>("ALL");
@@ -180,6 +183,8 @@ const LeaderboardPage: React.FC = () => {
         const list = (res.data?.leaderboard || []).map((e) => ({
           ...e,
           rank: e.rank ?? 0,
+          isProfilePrivate: e.isProfilePrivate === true,
+          canViewProfile: e.canViewProfile !== false,
         }));
 
         setEntries(list);
@@ -270,7 +275,19 @@ const LeaderboardPage: React.FC = () => {
   const top3 = filtered.slice(0, 3);
   const tableEntries = filtered;
 
-  const handleProfileClick = (id: string) => navigate(`/profile/${id}`);
+  const handleProfileClick = (entry: LeaderboardEntry) => {
+    const allowed =
+      entry.canViewProfile !== false ||
+      entry.studentId === currentStudentId ||
+      !entry.isProfilePrivate;
+
+    if (!allowed) {
+      setNotice("This profile is private.");
+      return;
+    }
+    setNotice(null);
+    navigate(`/profile/${entry.studentId}`);
+  };
 
   /* ---------------- LOADING ---------------- */
   if (loading) {
@@ -493,6 +510,12 @@ const LeaderboardPage: React.FC = () => {
           </div>
         </section>
 
+        {notice && (
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+            {notice}
+          </div>
+        )}
+
         {/* PODIUM TOP 3 */}
         <section className="space-y-5">
           <div className="flex items-center justify-between">
@@ -602,12 +625,20 @@ const LeaderboardPage: React.FC = () => {
                   ? "border-l-2 border-l-sky-400"
                   : "border-l border-l-transparent";
 
+                const canOpenProfile =
+                  entry.canViewProfile !== false ||
+                  entry.studentId === currentStudentId ||
+                  !entry.isProfilePrivate;
+
                 return (
                   <button
                     key={entry.studentId ?? `${entry.rank}-${idx}`}
                     type="button"
-                    onClick={() => handleProfileClick(entry.studentId)}
-                    className="w-full text-left group active:scale-[0.995] transition-transform"
+                    onClick={() => handleProfileClick(entry)}
+                    disabled={!canOpenProfile}
+                    className={`w-full text-left group active:scale-[0.995] transition-transform ${
+                      canOpenProfile ? "cursor-pointer" : "cursor-not-allowed opacity-80"
+                    }`}
                   >
                     {/* DESKTOP ROW */}
                     <div
@@ -938,7 +969,7 @@ type PodiumCardProps = {
   entry: LeaderboardEntry;
   size: "md" | "lg";
   variant: PodiumVariant;
-  onClick: (id: string) => void;
+  onClick: (entry: LeaderboardEntry) => void;
 };
 
 const PodiumCard: React.FC<PodiumCardProps> = ({
@@ -1010,7 +1041,7 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
   return (
     <button
       type="button"
-      onClick={() => onClick(entry.studentId)}
+      onClick={() => onClick(entry)}
       className={`relative flex flex-col items-center ${baseHeight} ${baseWidth}
         rounded-3xl border bg-[#050712]/80
         px-4 pt-4 pb-3 backdrop-blur-2xl

@@ -33,6 +33,15 @@ type PlatformKey =
   | "github"
   | "atcoder";
 
+const PLATFORM_URL: Record<PlatformKey, (h: string) => string> = {
+  leetcode: (h) => `https://leetcode.com/u/${h}/`,
+  codeforces: (h) => `https://codeforces.com/profile/${h}`,
+  codechef: (h) => `https://www.codechef.com/users/${h}`,
+  hackerrank: (h) => `https://www.hackerrank.com/profile/${h}`,
+  github: (h) => `https://github.com/${h}`,
+  atcoder: (h) => `https://atcoder.jp/users/${h}`,
+};
+
 type Student = {
   id?: string;
   studentId?: string;
@@ -78,24 +87,69 @@ function scoreBadge(score: number | undefined) {
 
 function PlatformIcons({ handles }: { handles?: Student["cpHandles"] }) {
   const has = (k: PlatformKey) => !!handles?.[k];
+  const open = (k: PlatformKey) => {
+    const h = handles?.[k];
+    if (!h) return;
+    window.open(PLATFORM_URL[k](h), "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div className="flex items-center gap-2 text-slate-300">
-      <div className={`p-2 rounded-xl border transition ${has("leetcode") ? "border-amber-500/40 bg-amber-500/10" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          open("leetcode");
+        }}
+        className={`p-2 rounded-xl border transition ${has("leetcode") ? "border-amber-500/40 bg-amber-500/10 hover:border-amber-400/60" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}
+        title="Open LeetCode profile"
+      >
         <SiLeetcode />
-      </div>
-      <div className={`p-2 rounded-xl border transition ${has("codeforces") ? "border-sky-500/40 bg-sky-500/10" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          open("codeforces");
+        }}
+        className={`p-2 rounded-xl border transition ${has("codeforces") ? "border-sky-500/40 bg-sky-500/10 hover:border-sky-400/60" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}
+        title="Open Codeforces profile"
+      >
         <SiCodeforces />
-      </div>
-      <div className={`p-2 rounded-xl border transition ${has("codechef") ? "border-stone-500/40 bg-stone-500/10" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          open("codechef");
+        }}
+        className={`p-2 rounded-xl border transition ${has("codechef") ? "border-stone-500/40 bg-stone-500/10 hover:border-stone-300/60" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}
+        title="Open CodeChef profile"
+      >
         <SiCodechef />
-      </div>
-      <div className={`p-2 rounded-xl border transition ${has("hackerrank") ? "border-emerald-500/40 bg-emerald-500/10" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          open("hackerrank");
+        }}
+        className={`p-2 rounded-xl border transition ${has("hackerrank") ? "border-emerald-500/40 bg-emerald-500/10 hover:border-emerald-400/60" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}
+        title="Open HackerRank profile"
+      >
         <SiHackerrank />
-      </div>
-      <div className={`p-2 rounded-xl border transition ${has("github") ? "border-slate-400/40 bg-slate-400/10" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          open("github");
+        }}
+        className={`p-2 rounded-xl border transition ${has("github") ? "border-slate-400/40 bg-slate-400/10 hover:border-slate-300/60" : "border-slate-800/60 bg-slate-950/30 opacity-40"}`}
+        title="Open GitHub profile"
+      >
         <SiGithub />
-      </div>
+      </button>
     </div>
   );
 }
@@ -223,7 +277,7 @@ export default function InstructorStudentsPage() {
     list.sort((a, b) => {
       if (sort === "name") return (a.fullName || "").localeCompare(b.fullName || "");
       if (sort === "solved") return (b.totalProblemsSolved || 0) - (a.totalProblemsSolved || 0);
-      return (b.codesyncScore || 0) - (a.codesyncScore || 0);
+      return (b.displayScore || b.codesyncScore || 0) - (a.displayScore || a.codesyncScore || 0);
     });
 
     return list;
@@ -312,7 +366,7 @@ export default function InstructorStudentsPage() {
               </span>
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              {onboardedCount} onboarded • {pendingCount} pending
+              {onboardedCount} onboarded - {pendingCount} pending
             </p>
           </div>
 
@@ -400,8 +454,8 @@ export default function InstructorStudentsPage() {
             className="rounded-2xl border border-slate-800/60 bg-slate-900/40 px-4 py-3 text-sm outline-none text-slate-100"
           >
             <option value="ALL">All Status</option>
-            <option value="onboarded">✅ Onboarded</option>
-            <option value="pending">⏳ Pending</option>
+            <option value="onboarded">Onboarded</option>
+            <option value="pending">Pending</option>
           </select>
         </div>
 
@@ -447,9 +501,10 @@ export default function InstructorStudentsPage() {
             <div className="col-span-1">#</div>
             <div className="col-span-4">Student</div>
             <div className="col-span-2">Score</div>
+            <div className="col-span-1">Solved</div>
             <div className="col-span-1">Status</div>
             <div className="col-span-2">Platforms</div>
-            <div className="col-span-2">Actions</div>
+            <div className="col-span-1">Actions</div>
           </div>
 
           <AnimatePresence>
@@ -462,7 +517,7 @@ export default function InstructorStudentsPage() {
                 className="px-6 py-10 text-slate-300 flex items-center gap-2"
               >
                 <RiRefreshLine className="animate-spin" />
-                Loading students…
+                Loading students...
               </motion.div>
             ) : err ? (
               <motion.div
@@ -499,7 +554,7 @@ export default function InstructorStudentsPage() {
               >
                 {filtered.map((s, idx) => {
                   const rank = idx + 1;
-                  const score = s.codesyncScore || 0;
+                  const score = s.displayScore ?? s.codesyncScore ?? 0;
                   const badge = scoreBadge(score);
                   const name = s.fullName || "Unknown";
                   const isOnboarded = s.onboardingCompleted;
@@ -529,8 +584,16 @@ export default function InstructorStudentsPage() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-slate-100 truncate">{name}</div>
-                          <div className="text-xs text-slate-500 mt-0.5 truncate">
-                            {s.rollNumber || "—"} • {s.branch || "—"} • {s.section || "—"}
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <span className="rounded-lg border border-slate-800/60 bg-slate-900/40 px-2 py-0.5">
+                              Roll {s.rollNumber || "--"}
+                            </span>
+                            <span className="rounded-lg border border-slate-800/60 bg-slate-900/40 px-2 py-0.5">
+                              {s.branch || "--"}
+                            </span>
+                            <span className="rounded-lg border border-slate-800/60 bg-slate-900/40 px-2 py-0.5">
+                              Sec {s.section || "--"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -540,6 +603,10 @@ export default function InstructorStudentsPage() {
                           <RiArrowRightUpLine className="text-lg" />
                           {score.toFixed(0)}
                         </div>
+                      </div>
+
+                      <div className="md:col-span-1 flex items-center text-sm text-slate-200">
+                        {s.totalProblemsSolved || 0}
                       </div>
 
                       <div className="md:col-span-1 flex items-center">
@@ -560,7 +627,7 @@ export default function InstructorStudentsPage() {
                         <PlatformIcons handles={s.cpHandles} />
                       </div>
 
-                      <div className="md:col-span-2 flex items-center justify-end gap-2">
+                      <div className="md:col-span-1 flex items-center justify-end gap-2">
                         <button
                           onClick={() => setNotifyData({ ...notifyData, recipientIds: [s.id || ""] })}
                           className="p-2 rounded-lg hover:bg-purple-900/30 text-purple-400 transition"

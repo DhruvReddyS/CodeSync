@@ -96,6 +96,7 @@ export interface StudentProfile {
 
   // ========== METADATA ==========
   onboardingCompleted: boolean;
+  isProfilePrivate?: boolean;
   lastActiveAt?: FirebaseFirestore.Timestamp | null;
   createdAt: FirebaseFirestore.FieldValue | FirebaseFirestore.Timestamp;
   updatedAt: FirebaseFirestore.FieldValue | FirebaseFirestore.Timestamp;

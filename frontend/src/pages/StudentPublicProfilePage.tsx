@@ -467,6 +467,9 @@ export default function StudentPublicProfilePage() {
             }
             // If student endpoint rejects instructor/admin, fall back.
             if (isStudentEndpoint && status === 403) {
+              if (role === "student") {
+                throw e;
+              }
               continue;
             }
             // For other errors, stop trying.
