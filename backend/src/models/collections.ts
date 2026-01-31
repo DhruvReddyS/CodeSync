@@ -14,6 +14,7 @@ export const collections = {
   students: firestore.collection("students"),
   studentScores: firestore.collection("studentScores"),
   instructors: firestore.collection("instructors"),
+  notifications: firestore.collection("notifications"),
 } as const;
 
 // ====================================

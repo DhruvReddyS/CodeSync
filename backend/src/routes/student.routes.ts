@@ -4,7 +4,7 @@ import express, { Response } from "express";
 import { FieldValue } from "../config/firebase";
 
 import authMiddleware, { AuthedRequest } from "../middleware/auth.middleware";
-import { requireStudent } from "../middleware/role.middleware";
+import { requireStudent, requireStudentOrInstructor } from "../middleware/role.middleware";
 
 import { PlatformId } from "../lib/scoringEngine";
 import {
@@ -404,7 +404,7 @@ router.get(
 router.get(
   "/profile/:id",
   authMiddleware,
-  requireStudent,
+  requireStudentOrInstructor,
   async (req: AuthedReq, res: Response) => {
     try {
       const targetId = String(req.params?.id || "").trim();
@@ -510,6 +510,65 @@ router.get(
       return res
         .status(500)
         .json({ message: err.message || "Failed to load profile" });
+    }
+  }
+);
+
+/* ==================================================
+ * 🔔 GET /api/student/notifications
+ * ================================================== */
+router.get(
+  "/notifications",
+  authMiddleware,
+  requireStudent,
+  async (req: AuthedReq, res: Response) => {
+    try {
+      const studentId = req.user!.sub;
+      const notificationsCol = collections.notifications;
+
+      const [broadcastSnap, directSnap] = await Promise.all([
+        notificationsCol
+          .where("audience", "==", "students")
+          .where("recipients", "array-contains", "all")
+          .limit(50)
+          .get(),
+        notificationsCol
+          .where("audience", "==", "students")
+          .where("recipients", "array-contains", studentId)
+          .limit(50)
+          .get(),
+      ]);
+
+      const map = new Map<string, any>();
+      const add = (doc: any) => {
+        const d = doc.data() || {};
+        map.set(doc.id, {
+          id: doc.id,
+          title: d.title ?? "",
+          message: d.message ?? "",
+          createdAt: d.createdAt?.toDate
+            ? d.createdAt.toDate().toISOString()
+            : d.createdAt
+            ? new Date(d.createdAt).toISOString()
+            : null,
+        });
+      };
+
+      broadcastSnap.docs.forEach(add);
+      directSnap.docs.forEach(add);
+
+      const items = Array.from(map.values()).sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+
+      return res.json({ notifications: items });
+    } catch (err: any) {
+      console.error("[STUDENT /notifications] error:", err);
+      return res
+        .status(500)
+        .json({ message: err.message || "Failed to load notifications" });
     }
   }
 );

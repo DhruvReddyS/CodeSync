@@ -18,8 +18,24 @@ export function requireInstructor(
   res: Response,
   next: NextFunction
 ) {
-  if (!req.user || req.user.role !== "instructor") {
+  if (!req.user || (req.user.role !== "instructor" && req.user.role !== "admin")) {
     return res.status(403).json({ message: "Instructor access required" });
+  }
+  next();
+}
+
+export function requireStudentOrInstructor(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  if (
+    !req.user ||
+    (req.user.role !== "student" &&
+      req.user.role !== "instructor" &&
+      req.user.role !== "admin")
+  ) {
+    return res.status(403).json({ message: "Student or instructor access required" });
   }
   next();
 }

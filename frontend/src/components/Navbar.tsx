@@ -50,33 +50,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
   const profileRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
-  // 🔔 Demo notifications (role-aware; can be wired later)
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: "1",
-      title: "Cohort refresh recommended",
-      description: "Scores might be stale. Trigger a refresh to update analytics.",
-      time: "Just now",
-      read: false,
-      route: "/instructor/dashboard",
-    },
-    {
-      id: "2",
-      title: "Inactive students detected",
-      description: "Several students haven’t been active this week. Review list.",
-      time: "10 min ago",
-      read: false,
-      route: "/instructor/students",
-    },
-    {
-      id: "3",
-      title: "Analytics update",
-      description: "Score distribution changed after last refresh.",
-      time: "1 hr ago",
-      read: false,
-      route: "/instructor/analytics",
-    },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const hasUnread = unreadCount > 0;
@@ -132,6 +106,36 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
      ✅ CHECK ONBOARDING STATUS FOR STUDENTS
      - Hide nav links if onboarding not complete
   -------------------------------------------------- */
+  const fetchNotifications = async () => {
+    if (!isLoggedIn || !role) return;
+    try {
+      if (role === "student") {
+        const res = await apiClient.get("/student/notifications");
+        const items = (res.data?.notifications || []).map((n: any) => ({
+          id: n.id,
+          title: n.title || "Notification",
+          description: n.message || "",
+          time: n.createdAt ? new Date(n.createdAt).toLocaleString() : "",
+          read: false,
+        }));
+        setNotifications(items);
+      } else {
+        const res = await apiClient.get("/instructor/notifications");
+        const items = (res.data?.notifications || []).map((n: any) => ({
+          id: n.id,
+          title: n.title || "Notification",
+          description: n.message || "",
+          time: n.createdAt ? new Date(n.createdAt).toLocaleString() : "",
+          read: false,
+          route: "/instructor/notifications",
+        }));
+        setNotifications(items);
+      }
+    } catch {
+      setNotifications([]);
+    }
+  };
+
   useEffect(() => {
     if (role !== "student" || !isLoggedIn) {
       setOnboardingCompleted(null);
@@ -162,6 +166,18 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     }
 
     checkOnboarding();
+  }, [role, isLoggedIn, authVersion]);
+
+  /* --------------------------------------------------
+     🔔 LOAD NOTIFICATIONS (role-aware)
+  -------------------------------------------------- */
+  useEffect(() => {
+    if (!isLoggedIn || !role) {
+      setNotifications([]);
+      return;
+    }
+    fetchNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, isLoggedIn, authVersion]);
 
   /* --------------------------------------------------
@@ -235,7 +251,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     { to: "/instructor/dashboard", label: "Dashboard", icon: <RiDashboardLine /> },
     { to: "/instructor/students", label: "Students", icon: <RiTeamLine /> },
     { to: "/instructor/analytics", label: "Analytics", icon: <RiBarChart2Line /> },
-    { to: "/instructor/settings", label: "Settings", icon: <RiSettings3Line /> },
+    { to: "/instructor/notifications", label: "Notifications", icon: <RiNotification3Line /> },
   ];
 
   const showLoggedInUI = authReady && isLoggedIn && role !== null;
@@ -256,6 +272,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     setNotificationsOpen(false);
     if (route) navigate(route);
   };
+
 
   return (
     <header className="sticky top-0 z-50 bg-[#050509]/95 backdrop-blur-xl border-b border-slate-900">
@@ -457,22 +474,32 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
                     </div>
 
                     <div className="mt-2 flex flex-col gap-1.5 text-xs sm:text-sm">
-                      {/* ✅ Instructor: send both Profile & Settings to /instructor/settings for now */}
-                      <Link
-                        to={role === "student" ? "/profile" : "/instructor/settings"}
-                        className="flex items-center gap-2 text-slate-200 hover:text-sky-400 transition-colors duration-150"
-                        onClick={() => setProfileDropdownOpen(false)}
-                      >
-                        <RiUserLine /> {role === "student" ? "Profile" : "Instructor Profile"}
-                      </Link>
-
-                      <Link
-                        to={role === "student" ? "/settings" : "/instructor/settings"}
-                        className="flex items-center gap-2 text-slate-200 hover:text-sky-400 transition-colors duration-150"
-                        onClick={() => setProfileDropdownOpen(false)}
-                      >
-                        <RiSettings3Line /> Settings
-                      </Link>
+                      {role === "student" ? (
+                        <>
+                          <Link
+                            to="/profile"
+                            className="flex items-center gap-2 text-slate-200 hover:text-sky-400 transition-colors duration-150"
+                            onClick={() => setProfileDropdownOpen(false)}
+                          >
+                            <RiUserLine /> Profile
+                          </Link>
+                          <Link
+                            to="/settings"
+                            className="flex items-center gap-2 text-slate-200 hover:text-sky-400 transition-colors duration-150"
+                            onClick={() => setProfileDropdownOpen(false)}
+                          >
+                            <RiSettings3Line /> Settings
+                          </Link>
+                        </>
+                      ) : (
+                        <Link
+                          to="/instructor/notifications"
+                          className="flex items-center gap-2 text-slate-200 hover:text-sky-400 transition-colors duration-150"
+                          onClick={() => setProfileDropdownOpen(false)}
+                        >
+                          <RiNotification3Line /> Notifications
+                        </Link>
+                      )}
 
                       <button
                         onClick={handleLogout}

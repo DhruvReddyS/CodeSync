@@ -1,8 +1,10 @@
 import express, { Response } from "express";
 import { collections } from "../models/collections";
+import { FieldValue } from "../config/firebase";
 
 import authMiddleware, { AuthedRequest } from "../middleware/auth.middleware";
 import { requireInstructor } from "../middleware/role.middleware";
+import { getStudentScores } from "../services/studentScoresService";
 
 const router = express.Router();
 
@@ -28,6 +30,14 @@ const PLATFORMS: PlatformId[] = [
   "hackerrank",
   "atcoder",
 ];
+const PLATFORM_LABEL: Record<PlatformId, string> = {
+  leetcode: "LeetCode",
+  codeforces: "Codeforces",
+  codechef: "CodeChef",
+  github: "GitHub",
+  hackerrank: "HackerRank",
+  atcoder: "AtCoder",
+};
 
 // Use centralized collection references
 const { students: studentsCol, studentScores: studentScoresCol } = collections;
@@ -516,16 +526,31 @@ router.get(
 
       const snap = await queryRef.limit(800).get();
 
-      const students = snap.docs
-        .map((doc) => {
+      const students = await Promise.all(
+        snap.docs.map(async (doc) => {
           const d = doc.data() || {};
-          const cpScores = d.cpScores || {};
-          const score = isNum(cpScores.displayScore)
-            ? clamp(cpScores.displayScore)
+          const legacyScores = d.cpScores || {};
+
+          const scoresDoc = await studentScoresCol.doc(doc.id).get();
+          const scores = scoresDoc.exists ? scoresDoc.data() : {};
+
+          const score = isNum(scores?.displayScore)
+            ? clamp(scores.displayScore)
+            : isNum(legacyScores.displayScore)
+            ? clamp(legacyScores.displayScore)
             : 0;
+          const rawTotal = isNum(scores?.codeSyncScore) ? scores.codeSyncScore : null;
+
+          const prevScoreRaw = isNum(scores?.prevDisplayScore)
+            ? scores.prevDisplayScore
+            : legacyScores.prevDisplayScore;
 
           const lastActiveRaw =
-            d.lastActiveAt ?? d.updatedAt ?? cpScores.updatedAt ?? null;
+            d.lastActiveAt ??
+            d.updatedAt ??
+            scores?.updatedAt ??
+            legacyScores.updatedAt ??
+            null;
 
           return {
             id: doc.id,
@@ -540,29 +565,36 @@ router.get(
             phone: d.phone ?? null,
 
             codesyncScore: score,
-            prevScore: isNum(cpScores.prevDisplayScore)
-              ? clamp(cpScores.prevDisplayScore)
-              : null,
+            displayScore: score,
+            codeSyncScore: rawTotal,
+            prevScore: isNum(prevScoreRaw) ? clamp(prevScoreRaw) : null,
+            totalProblemsSolved: scores?.totalProblemsSolved ?? 0,
+            onboardingCompleted: d.onboardingCompleted === true,
+            cpHandles: d.cpHandles || {},
 
             lastActiveAt: toISO(lastActiveRaw),
             activeThisWeek: withinLastDays(lastActiveRaw, 7),
 
-            platforms: d.platformSignals ?? {
-              leetcode: 0,
-              codeforces: 0,
-              codechef: 0,
-              github: 0,
-              hackerrank: 0,
-              atcoder: 0,
-            },
+            platforms:
+              d.platformSignals ??
+              d.platforms ?? {
+                leetcode: 0,
+                codeforces: 0,
+                codechef: 0,
+                github: 0,
+                hackerrank: 0,
+                atcoder: 0,
+              },
           };
         })
-        .filter((s) => {
+      ).then((list) =>
+        list.filter((s) => {
           if (!q) return true;
           const hay =
             `${s.name} ${s.id} ${s.branch ?? ""} ${s.section ?? ""} ${s.year ?? ""} ${s.rollNumber ?? ""}`.toLowerCase();
           return hay.includes(q);
-        });
+        })
+      );
 
       return res.json({
         students,
@@ -597,7 +629,10 @@ router.get(
 
       const data = snap.data() || {};
       const cpHandles = data.cpHandles || {};
-      const cpScores = data.cpScores || {};
+      const legacyScores = data.cpScores || {};
+
+      const scoresDoc = await studentScoresCol.doc(id).get();
+      const scores = scoresDoc.exists ? scoresDoc.data() : {};
 
       const platformStats = await loadPlatformStatsMap(id);
 
@@ -667,20 +702,30 @@ router.get(
           atcoder: cpHandles.atcoder ?? null,
         },
         cpScores: {
-          displayScore: isNum(cpScores.displayScore)
-            ? cpScores.displayScore
+          displayScore: isNum(scores?.displayScore)
+            ? scores.displayScore
+            : isNum(legacyScores.displayScore)
+            ? legacyScores.displayScore
             : null,
-          prevDisplayScore: isNum(cpScores.prevDisplayScore)
-            ? cpScores.prevDisplayScore
+          prevDisplayScore: isNum(scores?.prevDisplayScore)
+            ? scores.prevDisplayScore
+            : isNum(legacyScores.prevDisplayScore)
+            ? legacyScores.prevDisplayScore
             : null,
-          updatedAt: toISO(cpScores.updatedAt),
-          breakdown: cpScores.breakdown ?? null,
+          codeSyncScore: isNum(scores?.codeSyncScore)
+            ? scores.codeSyncScore
+            : null,
+          totalProblemsSolved: scores?.totalProblemsSolved ?? null,
+          platformSkills: scores?.platformSkills ?? legacyScores.platformSkills ?? null,
+          updatedAt: toISO(scores?.updatedAt ?? scores?.computedAt ?? legacyScores.updatedAt),
+          breakdown: scores?.breakdown ?? legacyScores.breakdown ?? null,
         },
 
         platformStats,
         platformNumbers,
         platformSignals,
         platformBreakdown,
+        platformWiseScores: platformBreakdown,
         platformSum,
         totals,
       });
@@ -694,43 +739,52 @@ router.get(
 );
 
 /* ==================================================
- * ✅ GET /api/instructor/students
- * ✅ Fetch students with filters
+ * ✅ GET /api/instructor/student/:id/profile
+ * ✅ Instructor-only public profile view
  * ================================================== */
 router.get(
-  "/students",
+  "/student/:id/profile",
   authMiddleware,
   requireInstructor,
   async (req: AuthedReq, res: Response) => {
     try {
-      const { branch, section, year, searchQuery } = req.query;
-      let query: any = studentsCol;
-
-      if (branch) query = query.where("branch", "==", branch);
-      if (section) query = query.where("section", "==", section);
-      if (year) query = query.where("yearOfStudy", "==", Number(year));
-
-      const snapshot = await query.get();
-      let students = snapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      if (searchQuery) {
-        const q = (searchQuery as string).toLowerCase();
-        students = students.filter((s: any) => {
-          const name = (s.fullName || s.fullname || s.name || "").toLowerCase();
-          const email = (s.email || s.collegeEmail || "").toLowerCase();
-          const rollNo = (s.rollNumber || "").toLowerCase();
-          return name.includes(q) || email.includes(q) || rollNo.includes(q);
-        });
+      const targetId = safeStr(req.params.id).trim();
+      if (!targetId) {
+        return res.status(400).json({ message: "Student id is required" });
       }
 
-      return res.json({ students });
+      const snap = await studentsCol.doc(targetId).get();
+      if (!snap.exists) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      const data = snap.data() || {};
+      const cpScores = await getStudentScores(targetId, true);
+      const platformStats = await loadPlatformStatsMap(targetId);
+
+      return res.json({
+        student: {
+          id: targetId,
+          fullName: data.fullName || data.fullname || data.name || null,
+          branch: data.branch || null,
+          section: data.section || null,
+          year: data.yearOfStudy || data.year || null,
+          rollNumber: data.rollNumber || null,
+          graduationYear: data.graduationYear || null,
+          collegeEmail: data.collegeEmail || null,
+          personalEmail: data.personalEmail || null,
+          phone: data.phone || null,
+          profile: data.profile || {},
+          cpHandles: data.cpHandles || {},
+        },
+        cpScores,
+        platformStats,
+      });
     } catch (err: any) {
+      console.error("[INSTRUCTOR /student/:id/profile] error:", err);
       return res
         .status(500)
-        .json({ message: err.message || "Failed to fetch students" });
+        .json({ message: err.message || "Failed to load student profile" });
     }
   }
 );
@@ -820,50 +874,52 @@ router.get(
   async (req: AuthedReq, res: Response) => {
     try {
       const snapshot = await studentsCol.get();
-      const students = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as any[];
+      const students = await Promise.all(
+        snapshot.docs.map(async (doc) => {
+          const d = doc.data() || {};
+          const scoresDoc = await studentScoresCol.doc(doc.id).get();
+          const scores = scoresDoc.exists ? scoresDoc.data() : {};
+          return {
+            id: doc.id,
+            ...d,
+            __scores: scores,
+          };
+        })
+      );
 
       const totalStudents = students.length;
       const scores = students
-        .map((s) => s.cpScores?.displayScore || 0)
+        .map((s: any) =>
+          isNum(s.__scores?.displayScore)
+            ? s.__scores.displayScore
+            : s.cpScores?.displayScore || 0
+        )
         .filter((s) => s > 0);
       const avgScore =
         scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+      const sortedScores = [...scores].sort((a, b) => a - b);
+      const medianScore = sortedScores.length
+        ? sortedScores[Math.floor(sortedScores.length / 2)]
+        : 0;
+      const p90Score = sortedScores.length
+        ? sortedScores[Math.floor(sortedScores.length * 0.9) - 1]
+        : 0;
 
       // Score distribution
       const scoreDistribution = [
-        { range: "0-20", students: students.filter((s) => (s.cpScores?.displayScore || 0) < 20).length },
-        { range: "20-40", students: students.filter((s) => { const sc = s.cpScores?.displayScore || 0; return sc >= 20 && sc < 40; }).length },
-        { range: "40-60", students: students.filter((s) => { const sc = s.cpScores?.displayScore || 0; return sc >= 40 && sc < 60; }).length },
-        { range: "60-80", students: students.filter((s) => { const sc = s.cpScores?.displayScore || 0; return sc >= 60 && sc < 80; }).length },
-        { range: "80-100", students: students.filter((s) => (s.cpScores?.displayScore || 0) >= 80).length },
+        { range: "0-20", students: students.filter((s: any) => (isNum(s.__scores?.displayScore) ? s.__scores.displayScore : s.cpScores?.displayScore || 0) < 20).length },
+        { range: "20-40", students: students.filter((s: any) => { const sc = isNum(s.__scores?.displayScore) ? s.__scores.displayScore : s.cpScores?.displayScore || 0; return sc >= 20 && sc < 40; }).length },
+        { range: "40-60", students: students.filter((s: any) => { const sc = isNum(s.__scores?.displayScore) ? s.__scores.displayScore : s.cpScores?.displayScore || 0; return sc >= 40 && sc < 60; }).length },
+        { range: "60-80", students: students.filter((s: any) => { const sc = isNum(s.__scores?.displayScore) ? s.__scores.displayScore : s.cpScores?.displayScore || 0; return sc >= 60 && sc < 80; }).length },
+        { range: "80-100", students: students.filter((s: any) => (isNum(s.__scores?.displayScore) ? s.__scores.displayScore : s.cpScores?.displayScore || 0) >= 80).length },
       ];
 
       // Platform stats
-      const platformStats = [
-        {
-          name: "LeetCode",
-          engaged: students.filter((s) => s.cpHandles?.leetcode).length,
-          inactive: students.filter((s) => !s.cpHandles?.leetcode).length,
-        },
-        {
-          name: "Codeforces",
-          engaged: students.filter((s) => s.cpHandles?.codeforces).length,
-          inactive: students.filter((s) => !s.cpHandles?.codeforces).length,
-        },
-        {
-          name: "CodeChef",
-          engaged: students.filter((s) => s.cpHandles?.codechef).length,
-          inactive: students.filter((s) => !s.cpHandles?.codechef).length,
-        },
-        {
-          name: "GitHub",
-          engaged: students.filter((s) => s.cpHandles?.github).length,
-          inactive: students.filter((s) => !s.cpHandles?.github).length,
-        },
-      ];
+      const platformStats = PLATFORMS.map((platform) => ({
+        name: PLATFORM_LABEL[platform],
+        engaged: students.filter((s: any) => s.cpHandles?.[platform]).length,
+        inactive: students.filter((s: any) => !s.cpHandles?.[platform]).length,
+      }));
 
       // Weekly progress (mock)
       const weeklyProgress = [
@@ -876,10 +932,13 @@ router.get(
 
       // Branch comparison
       const branchMap = new Map<string, number[]>();
-      students.forEach((s) => {
+      students.forEach((s: any) => {
         const branch = s.branch || "Unknown";
         if (!branchMap.has(branch)) branchMap.set(branch, []);
-        branchMap.get(branch)!.push(s.cpScores?.displayScore || 0);
+        const sc = isNum(s.__scores?.displayScore)
+          ? s.__scores.displayScore
+          : s.cpScores?.displayScore || 0;
+        branchMap.get(branch)!.push(sc);
       });
       const branchComparison = Array.from(branchMap.entries()).map(
         ([branch, scores]) => ({
@@ -890,12 +949,27 @@ router.get(
 
       // Top performers
       const topPerformers = students
-        .sort((a, b) => (b.cpScores?.displayScore || 0) - (a.cpScores?.displayScore || 0))
+        .sort((a: any, b: any) => {
+          const aScore = isNum(a.__scores?.displayScore)
+            ? a.__scores.displayScore
+            : a.cpScores?.displayScore || 0;
+          const bScore = isNum(b.__scores?.displayScore)
+            ? b.__scores.displayScore
+            : b.cpScores?.displayScore || 0;
+          return bScore - aScore;
+        })
         .slice(0, 5)
-        .map((s) => ({
+        .map((s: any) => ({
           name: s.fullName || s.fullname || s.name || "Unknown",
-          score: s.cpScores?.displayScore || 0,
+          score: isNum(s.__scores?.displayScore)
+            ? s.__scores.displayScore
+            : s.cpScores?.displayScore || 0,
         }));
+
+      const onboarded = students.filter((s: any) => s.onboardingCompleted).length;
+      const activeThisWeek = students.filter((s: any) =>
+        withinLastDays(s.lastActiveAt ?? s.updatedAt ?? s.__scores?.updatedAt ?? null, 7)
+      ).length;
 
       return res.json({
         scoreDistribution,
@@ -904,7 +978,22 @@ router.get(
         branchComparison,
         totalStudents,
         avgScore: Math.round(avgScore * 10) / 10,
+        medianScore: Math.round(medianScore * 10) / 10,
+        p90Score: Math.round(p90Score * 10) / 10,
+        totalProblemsSolved: students.reduce(
+          (acc: number, s: any) => acc + (s.__scores?.totalProblemsSolved || 0),
+          0
+        ),
+        onboarding: {
+          onboarded,
+          pending: totalStudents - onboarded,
+        },
+        activity: {
+          activeThisWeek,
+          inactive: totalStudents - activeThisWeek,
+        },
         topPerformers,
+        lastSyncAt: new Date().toISOString(),
       });
     } catch (err: any) {
       return res
@@ -998,6 +1087,11 @@ router.post(
         return res.status(400).json({ message: "Missing required fields" });
       }
 
+      const recipients =
+        Array.isArray(recipientIds) && recipientIds.length > 0
+          ? recipientIds
+          : ["all"];
+
       // Create notification document
       const notificationsCol = require("../models/collections").collections.notifications || 
         require("../config/firebase").db.collection("notifications");
@@ -1007,8 +1101,9 @@ router.post(
         senderId: userId,
         title,
         message,
-        recipients: recipientIds || [],
-        createdAt: new Date(),
+        recipients,
+        audience: "students",
+        createdAt: FieldValue.serverTimestamp(),
         read: false,
       });
 
@@ -1020,6 +1115,54 @@ router.post(
       return res
         .status(500)
         .json({ message: err.message || "Failed to send notification" });
+    }
+  }
+);
+
+/* ==================================================
+ * ✅ GET /api/instructor/notifications
+ * ✅ List recent notifications sent by instructor
+ * ================================================== */
+router.get(
+  "/notifications",
+  authMiddleware,
+  requireInstructor,
+  async (req: AuthedReq, res: Response) => {
+    try {
+      const userId = req.user?.sub;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const notificationsCol = require("../models/collections").collections.notifications || 
+        require("../config/firebase").db.collection("notifications");
+
+      const snap = await notificationsCol
+        .where("senderId", "==", userId)
+        .limit(100)
+        .get();
+
+      const items = snap.docs.map((doc: any) => {
+        const d = doc.data() || {};
+        return {
+          id: doc.id,
+          title: d.title ?? "",
+          message: d.message ?? "",
+          audience: d.audience ?? "students",
+          recipients: d.recipients ?? [],
+          createdAt: toISO(d.createdAt),
+        };
+      });
+
+      const sorted = items.sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+
+      return res.json({ notifications: sorted });
+    } catch (err: any) {
+      return res
+        .status(500)
+        .json({ message: err.message || "Failed to fetch notifications" });
     }
   }
 );

@@ -37,6 +37,7 @@ import InstructorDashboard from "./pages/instructor/InstructorDashboard";
 import InstructorStudents from "./pages/instructor/InstructorStudents";
 import InstructorAnalytics from "./pages/instructor/InstructorAnalytics";
 import InstructorSettings from "./pages/instructor/InstructorSettings";
+import InstructorNotifications from "./pages/instructor/InstructorNotifications";
 
 export default function App() {
   // 🔁 Bump this whenever login/logout happens so Navbar + routes re-read sessionStorage
@@ -145,7 +146,7 @@ export default function App() {
           <Route
             path="/profile/:id"
             element={
-              <ProtectedRoute allowedRoles={["student"]} authVersion={authVersion}>
+              <ProtectedRoute allowedRoles={["student", "instructor"]} authVersion={authVersion}>
                 <StudentPublicProfilePage />
               </ProtectedRoute>
             }
@@ -240,6 +241,15 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={["instructor"]} authVersion={authVersion}>
                 <InstructorSettings />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/instructor/notifications"
+            element={
+              <ProtectedRoute allowedRoles={["instructor"]} authVersion={authVersion}>
+                <InstructorNotifications />
               </ProtectedRoute>
             }
           />

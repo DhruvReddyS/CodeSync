@@ -3,25 +3,42 @@ import apiClient from "../../lib/apiClient";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   RiTeamLine,
-  RiPulseLine,
   RiTrophyLine,
-  RiAlarmWarningLine,
-  RiSearch2Line,
-  RiRefreshLine,
-  RiArrowRightUpLine,
-  RiDownload2Line,
-  RiCloseLine,
-  RiBarChart2Line,
   RiFireLine,
+  RiSearchLine,
+  RiRefreshLine,
+  RiBarChartLine,
   RiMailLine,
   RiPhoneLine,
-  RiUser3Line,
-  RiHashtag,
-  RiTimeLine,
+  RiCloseCircleLine,
+  RiArrowUpLine,
+  RiArrowDownLine,
+  RiDownloadLine,
+  RiCloseLine,
   RiLinksLine,
+  RiFlashlightLine,
+  RiShieldLine,
+  RiSparkling2Line,
+  RiCheckDoubleLine,
+  RiFileCopyLine,
+  RiExternalLinkLine,
+  RiAlarmWarningLine,
+  RiPulseLine,
+  RiArrowRightUpLine,
+  RiInformationLine,
+  RiTimeLine,
 } from "react-icons/ri";
+import {
+  SiLeetcode,
+  SiCodechef,
+  SiHackerrank,
+  SiCodeforces,
+  SiGithub,
+} from "react-icons/si";
 
-/* ----------------- TYPES ----------------- */
+/* ============================================================================
+ * TYPES
+ * ============================================================================ */
 
 type PlatformId =
   | "leetcode"
@@ -31,46 +48,37 @@ type PlatformId =
   | "hackerrank"
   | "atcoder";
 
-const PLATFORMS: PlatformId[] = [
-  "leetcode",
-  "codeforces",
-  "codechef",
-  "github",
-  "hackerrank",
-  "atcoder",
-];
-
-const PLATFORM_LABEL: Record<PlatformId, string> = {
-  leetcode: "LeetCode",
-  codeforces: "Codeforces",
-  codechef: "CodeChef",
-  github: "GitHub",
-  hackerrank: "HackerRank",
-  atcoder: "AtCoder",
+type CpScores = {
+  codeSyncScore?: number;
+  displayScore?: number;
+  platformSkills?: Record<PlatformId, number>;
+  lastComputedAt?: string;
 };
 
 type Student = {
   id: string;
   name: string;
+  email?: string;
+  phone?: string;
   branch?: string;
   section?: string;
   year?: string;
-
-  codesyncScore?: number; // displayScore
-  prevScore?: number | null;
+  cpScores: CpScores | null;
+  cpHandles?: Partial<Record<PlatformId, string>>;
+  lastActiveAt?: string;
   activeThisWeek?: boolean;
-  lastActiveAt?: string | null;
-
-  // NOTE: dashboard platforms are quick placeholders; drawer uses real stats route
+  displayScore?: number;
+  codesyncScore?: number;
+  codeSyncScore?: number;
   platforms?: Partial<Record<PlatformId, number>>;
-
-  email?: string | null;
-  phone?: string | null;
 };
 
 type DashboardResponse = {
   students: Student[];
-  lastSyncAt?: string | null;
+  stats?: {
+    totalStudents: number;
+    lastSyncAt?: string;
+  };
 };
 
 type StudentStatsResponse = {
@@ -84,1283 +92,832 @@ type StudentStatsResponse = {
     phone?: string | null;
     updatedAt?: string | null;
   } | null;
-
   cpHandles?: Partial<Record<PlatformId, string | null>> | null;
-
   cpScores?: {
     displayScore?: number;
-    prevDisplayScore?: number | null;
-    updatedAt?: string | null;
-    breakdown?: any;
+    codeSyncScore?: number;
+    platformSkills?: Record<PlatformId, number>;
+    lastComputedAt?: string;
   } | null;
-
-  platformStats?: Partial<Record<PlatformId, any | null>> | null;
-
-  // ✅ from backend (use this!)
   platformNumbers?: Partial<Record<PlatformId, any | null>> | null;
-
-  // ✅ 0-100 each (use this!)
   platformSignals?: Partial<Record<PlatformId, number>> | null;
-
-  // ✅ total+parts (use this for detailed score explanation)
   platformWiseScores?: Partial<Record<PlatformId, { total: number; parts: Record<string, number> }>> | null;
-
   platformSum?: number;
-  platformTotalScore?: number;
   overallFromPlatforms?: number;
 };
 
-/* ----------------- STYLE ----------------- */
+const PLATFORM_LABEL: Record<PlatformId, string> = {
+  leetcode: "LeetCode",
+  codeforces: "Codeforces",
+  codechef: "CodeChef",
+  github: "GitHub",
+  hackerrank: "HackerRank",
+  atcoder: "AtCoder",
+};
 
-const BG = "bg-[#050509]";
-const CARD =
-  "rounded-2xl border border-slate-800/80 bg-slate-950/50 backdrop-blur-xl shadow-[0_0_0_1px_rgba(15,23,42,0.7)]";
+const PLATFORM_URL: Record<PlatformId, (h: string) => string> = {
+  leetcode: (h) => `https://leetcode.com/u/${h}/`,
+  codeforces: (h) => `https://codeforces.com/profile/${h}`,
+  codechef: (h) => `https://www.codechef.com/users/${h}`,
+  github: (h) => `https://github.com/${h}`,
+  hackerrank: (h) => `https://www.hackerrank.com/profile/${h}`,
+  atcoder: (h) => `https://atcoder.jp/users/${h}`,
+};
 
-/* ----------------- UTILS ----------------- */
+const PLATFORMS: PlatformId[] = [
+  "leetcode",
+  "codeforces",
+  "codechef",
+  "github",
+  "hackerrank",
+  "atcoder",
+];
 
-function clamp(n: number, a = 0, b = 100) {
-  return Math.max(a, Math.min(b, n));
-}
-function pct(part: number, total: number) {
-  if (!total) return 0;
-  return (part / total) * 100;
-}
-function fmt(n: number) {
-  return Number.isFinite(n) ? String(Math.round(n)) : "0";
-}
-function median(arr: number[]) {
-  if (!arr.length) return 0;
-  const a = [...arr].sort((x, y) => x - y);
-  const mid = Math.floor(a.length / 2);
-  return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
-}
-function percentile(arr: number[], p: number) {
-  if (!arr.length) return 0;
-  const a = [...arr].sort((x, y) => x - y);
-  const idx = Math.min(
-    a.length - 1,
-    Math.max(0, Math.floor((p / 100) * a.length) - 1)
-  );
-  return a[idx];
-}
-function safeStr(x?: any) {
-  return (x ?? "").toString();
-}
-function niceDate(x?: string | null) {
-  if (!x) return "—";
-  const d = new Date(x);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
-}
+/* ============================================================================
+ * COMPONENT
+ * ============================================================================ */
 
-/** CSV */
-function downloadCSV(filename: string, rows: Array<Record<string, any>>) {
-  const colSet = new Set<string>();
-  for (const r of rows) for (const k of Object.keys(r)) colSet.add(k);
-  const cols = [...colSet];
-
-  const esc = (v: any) => {
-    const str = (v ?? "").toString();
-    if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-    return str;
-  };
-
-  const csv =
-    cols.join(",") +
-    "\n" +
-    rows.map((r) => cols.map((c) => esc(r[c])).join(",")).join("\n");
-
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-/* ----------------- UI COMPONENTS ----------------- */
-
-function GlowTitle({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div>
-      <div className="inline-flex items-center gap-2">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-50">
-          {title}
-        </h1>
-        <span className="hidden sm:inline-flex items-center rounded-full border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.14em] text-slate-300">
-          Instructor
-        </span>
-      </div>
-      {subtitle ? (
-        <div className="mt-1 text-sm text-slate-400">{subtitle}</div>
-      ) : null}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  hint,
-  icon,
-  tone = "sky",
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  icon: React.ReactNode;
-  tone?: "sky" | "fuchsia" | "emerald" | "rose" | "amber";
-}) {
-  const toneCls: Record<string, string> = {
-    sky: "from-sky-500/30 via-sky-500/10 to-transparent",
-    fuchsia: "from-fuchsia-500/30 via-fuchsia-500/10 to-transparent",
-    emerald: "from-emerald-500/30 via-emerald-500/10 to-transparent",
-    rose: "from-rose-500/30 via-rose-500/10 to-transparent",
-    amber: "from-amber-500/30 via-amber-500/10 to-transparent",
-  };
-
-  return (
-    <div className={`${CARD} p-4 relative overflow-hidden`}>
-      <div
-        className={`absolute inset-0 bg-gradient-to-br ${toneCls[tone]} opacity-80`}
-      />
-      <div className="relative flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-            {label}
-          </div>
-          <div className="mt-1 text-2xl font-semibold text-slate-50">
-            {value}
-          </div>
-          {hint ? <div className="mt-1 text-xs text-slate-400">{hint}</div> : null}
-        </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-2 text-slate-200">
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BarRow({
-  label,
-  value,
-  right,
-}: {
-  label: string;
-  value: number; // 0-100
-  right?: React.ReactNode;
-}) {
-  const v = clamp(value);
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-28 text-xs text-slate-300 truncate">{label}</div>
-      <div className="h-2 flex-1 rounded-full bg-slate-800/60 overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400"
-          style={{ width: `${v}%` }}
-        />
-      </div>
-      <div className="w-16 text-right text-xs text-slate-400">
-        {right ?? `${Math.round(v)}%`}
-      </div>
-    </div>
-  );
-}
-
-function Chip({
-  active,
-  children,
-  onClick,
-}: {
-  active?: boolean;
-  children: React.ReactNode;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={[
-        "rounded-full border px-3 py-1 text-[0.7rem] transition",
-        active
-          ? "border-sky-500/40 bg-sky-500/10 text-slate-100 shadow-[0_0_18px_rgba(56,189,248,0.15)]"
-          : "border-slate-800 bg-slate-950/50 text-slate-300 hover:bg-slate-900/60",
-      ].join(" ")}
-      type="button"
-    >
-      {children}
-    </button>
-  );
-}
-
-function PlatformMini({ platforms }: { platforms?: Student["platforms"] }) {
-  const items = [
-    ["LC", platforms?.leetcode ?? 0],
-    ["CF", platforms?.codeforces ?? 0],
-    ["CC", platforms?.codechef ?? 0],
-    ["GH", platforms?.github ?? 0],
-  ] as const;
-
-  const max = Math.max(1, ...items.map((x) => x[1] ?? 0));
-  return (
-    <div className="flex items-center gap-2">
-      {items.map(([k, v]) => (
-        <div key={k} className="flex items-center gap-1">
-          <span className="text-[0.65rem] text-slate-500">{k}</span>
-          <span className="inline-block h-1.5 w-10 rounded-full bg-slate-800 overflow-hidden">
-            <span
-              className="block h-full bg-slate-200/70"
-              style={{ width: `${((v ?? 0) / max) * 100}%` }}
-            />
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Chips from platformNumbers (backend normalized numbers) */
-function numberChips(platform: PlatformId, numbers: any | null) {
-  if (!numbers) return [];
-  const out: Array<{ k: string; v: string }> = [];
-
-  if (platform === "leetcode") {
-    if (numbers.solved != null) out.push({ k: "solved", v: String(numbers.solved) });
-    if (numbers.contestRating != null && numbers.contestRating > 0)
-      out.push({ k: "rating", v: String(numbers.contestRating) });
-    if (numbers.easy != null) out.push({ k: "easy", v: String(numbers.easy) });
-    if (numbers.medium != null) out.push({ k: "med", v: String(numbers.medium) });
-    if (numbers.hard != null) out.push({ k: "hard", v: String(numbers.hard) });
-  }
-
-  if (platform === "codeforces") {
-    if (numbers.rating != null && numbers.rating > 0) out.push({ k: "rating", v: String(numbers.rating) });
-    if (numbers.maxRating != null && numbers.maxRating > 0) out.push({ k: "max", v: String(numbers.maxRating) });
-    if (numbers.contests != null && numbers.contests > 0) out.push({ k: "contests", v: String(numbers.contests) });
-    if (numbers.rank) out.push({ k: "rank", v: String(numbers.rank) });
-  }
-
-  if (platform === "codechef") {
-    if (numbers.rating != null && numbers.rating > 0) out.push({ k: "rating", v: String(numbers.rating) });
-    if (numbers.stars != null && numbers.stars > 0) out.push({ k: "stars", v: `${numbers.stars}★` });
-  }
-
-  if (platform === "github") {
-    if (numbers.contributions != null) out.push({ k: "contrib", v: String(numbers.contributions) });
-    if (numbers.publicRepos != null) out.push({ k: "repos", v: String(numbers.publicRepos) });
-    if (numbers.followers != null) out.push({ k: "followers", v: String(numbers.followers) });
-  }
-
-  if (platform === "hackerrank") {
-    if (numbers.badges != null) out.push({ k: "badges", v: String(numbers.badges) });
-    if (numbers.stars != null) out.push({ k: "stars", v: `${numbers.stars}★` });
-  }
-
-  if (platform === "atcoder") {
-    if (numbers.rating != null && numbers.rating > 0) out.push({ k: "rating", v: String(numbers.rating) });
-    if (numbers.maxRating != null && numbers.maxRating > 0) out.push({ k: "max", v: String(numbers.maxRating) });
-  }
-
-  return out.slice(0, 6);
-}
-
-type SortKey = "name" | "branch" | "section" | "year" | "score" | "active";
-type SortDir = "asc" | "desc";
-
-/* ----------------- PAGE ----------------- */
-
-export default function InstructorDashboard() {
+const InstructorDashboard: React.FC = () => {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"score" | "name" | "recent">("score");
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStats, setSelectedStats] = useState<StudentStatsResponse | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-
-  // filters
-  const [branch, setBranch] = useState<string>("all");
-  const [section, setSection] = useState<string>("all");
-  const [year, setYear] = useState<string>("all");
-  const [q, setQ] = useState<string>("");
-
-  // table
-  const [sortKey, setSortKey] = useState<SortKey>("score");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-
-  // drawer + real details
-  const [selected, setSelected] = useState<Student | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [selectedStats, setSelectedStats] = useState<StudentStatsResponse | null>(null);
-
+  /* ========== FETCH STUDENTS ========== */
   const fetchDashboard = async () => {
-    setLoading(true);
     try {
-      const res = await apiClient.get("/instructor/dashboard", {
-        params: {
-          branch: branch === "all" ? undefined : branch,
-          section: section === "all" ? undefined : section,
-          year: year === "all" ? undefined : year,
-          q: q.trim() ? q.trim() : undefined,
-        },
-      });
-      const data: DashboardResponse = res.data;
-      setStudents(data.students ?? []);
-      setLastSyncAt(data.lastSyncAt ?? null);
+      setError(null);
+      const res = await apiClient.get<DashboardResponse>("/instructor/dashboard");
+      setStudents(res.data.students || []);
+    } catch (err: any) {
+      console.error("[InstructorDashboard] fetch error:", err);
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to load dashboard"
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const triggerRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await apiClient.post("/instructor/refresh-cohort", {
-        branch: branch === "all" ? undefined : branch,
-        section: section === "all" ? undefined : section,
-        year: year === "all" ? undefined : year,
-      });
-      await fetchDashboard();
-    } catch {
-      // ok if not implemented
-    } finally {
-      setRefreshing(false);
-    }
-  };
+  useEffect(() => {
+    fetchDashboard();
+  }, []);
 
-  /** ✅ open drawer + load real platform data */
-  const openStudent = async (s: Student) => {
-    setSelected(s);
-    setSelectedStats(null);
+  /* ========== FETCH STUDENT STATS ========== */
+  const fetchStudentStats = async (studentId: string) => {
     setStatsLoading(true);
     try {
-      const res = await apiClient.get(`/instructor/student/${s.id}/stats`);
-      setSelectedStats((res.data ?? null) as StudentStatsResponse | null);
-    } catch {
+      const res = await apiClient.get<StudentStatsResponse>(
+        `/instructor/student/${studentId}/stats`
+      );
+      setSelectedStats(res.data || null);
+    } catch (err: any) {
+      console.error("[InstructorDashboard] stats fetch error:", err);
       setSelectedStats(null);
     } finally {
       setStatsLoading(false);
     }
   };
 
+  /* ========== SEARCH & FILTER ========== */
   useEffect(() => {
-    fetchDashboard();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let filtered = [...students];
 
-  const options = useMemo(() => {
-    const branches = new Set<string>();
-    const sections = new Set<string>();
-    const years = new Set<string>();
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (s) =>
+          s.name?.toLowerCase().includes(q) ||
+          s.email?.toLowerCase().includes(q) ||
+          Object.values(s.cpHandles || {})
+            .filter(Boolean)
+            .some((h) => h?.toLowerCase().includes(q))
+      );
+    }
 
-    students.forEach((s) => {
-      if (s.branch) branches.add(String(s.branch));
-      if (s.section) sections.add(String(s.section));
-      if (s.year) years.add(String(s.year));
-    });
+    // Sort
+    if (sortBy === "score") {
+      filtered.sort(
+        (a, b) =>
+          (getDisplayScore(b)) - (getDisplayScore(a))
+      );
+    } else if (sortBy === "name") {
+      filtered.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    } else if (sortBy === "recent") {
+      filtered.sort((a, b) => {
+        const aTime = a.lastActiveAt
+          ? new Date(a.lastActiveAt).getTime()
+          : 0;
+        const bTime = b.lastActiveAt
+          ? new Date(b.lastActiveAt).getTime()
+          : 0;
+        return bTime - aTime;
+      });
+    }
 
-    const sortStr = (a: string, b: string) => a.localeCompare(b);
-    return {
-      branches: ["all", ...Array.from(branches).sort(sortStr)],
-      sections: ["all", ...Array.from(sections).sort(sortStr)],
-      years: ["all", ...Array.from(years).sort((a, b) => parseInt(a) - parseInt(b))],
-    };
+    setFilteredStudents(filtered);
+  }, [students, searchQuery, sortBy]);
+
+  /* ========== HELPERS ========== */
+  const getDisplayScore = (student: Student) => {
+    const score = student.cpScores?.displayScore ?? student.displayScore ?? student.codesyncScore ?? 0;
+    return Math.min(Math.max(score, 0), 100);
+  };
+
+  const getTotalScore = (student: Student) => {
+    return student.cpScores?.codeSyncScore ?? student.codeSyncScore ?? 0;
+  };
+
+  /* ========== STATS ========== */
+  const stats = useMemo(() => {
+    const total = students.length;
+    const totalScore = students.reduce(
+      (acc, s) => acc + (getTotalScore(s) ?? 0),
+      0
+    );
+    const avgScore = total > 0 ? totalScore / total : 0;
+    const topStudent = students.reduce((prev, curr) =>
+      (getDisplayScore(curr)) > (getDisplayScore(prev))
+        ? curr
+        : prev
+    );
+
+    const linkedCount = students.filter((s) => {
+      const handles = Object.values(s.cpHandles || {}).filter(Boolean);
+      return handles.length > 0;
+    }).length;
+
+    return { total, totalScore, avgScore, topStudent, linkedCount };
   }, [students]);
 
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return students.filter((x) => {
-      if (branch !== "all" && safeStr(x.branch) !== branch) return false;
-      if (section !== "all" && safeStr(x.section) !== section) return false;
-      if (year !== "all" && safeStr(x.year) !== year) return false;
-
-      if (s) {
-        const hay = `${x.name ?? ""} ${x.id ?? ""} ${x.branch ?? ""} ${x.section ?? ""} ${x.year ?? ""}`.toLowerCase();
-        if (!hay.includes(s)) return false;
-      }
-      return true;
-    });
-  }, [students, branch, section, year, q]);
-
-  const scores = useMemo(() => filtered.map((s) => clamp(s.codesyncScore ?? 0)), [filtered]);
-
-  const kpis = useMemo(() => {
-    const total = filtered.length;
-    const active = filtered.filter((s) => s.activeThisWeek).length;
-    const inactive = total - active;
-
-    const avg = total ? scores.reduce((a, b) => a + b, 0) / total : 0;
-    const med = median(scores);
-    const p90 = percentile(scores, 90);
-
-    const atRisk = filtered.filter((s) => (s.codesyncScore ?? 0) < 35).length;
-
-    const deltaAvg =
-      filtered.some((s) => typeof s.prevScore === "number")
-        ? filtered.reduce(
-            (a, s) => a + ((s.codesyncScore ?? 0) - (s.prevScore ?? (s.codesyncScore ?? 0))),
-            0
-          ) / Math.max(1, total)
-        : null;
-
-    return { total, active, inactive, avg, med, p90, atRisk, deltaAvg };
-  }, [filtered, scores]);
-
-  const groupCounts = (key: keyof Student) => {
-    const map = new Map<string, number>();
-    filtered.forEach((s) => {
-      const v = (s[key] as string) || "Unknown";
-      map.set(v, (map.get(v) ?? 0) + 1);
-    });
-    return Array.from(map.entries())
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count);
+  /* ========== OPEN STUDENT ========== */
+  const openStudent = (student: Student) => {
+    setSelectedStudent(student);
+    fetchStudentStats(student.id);
   };
 
-  const byBranch = useMemo(() => groupCounts("branch"), [filtered]);
-  const bySection = useMemo(() => groupCounts("section"), [filtered]);
-  const byYear = useMemo(() => groupCounts("year"), [filtered]);
-
-  const buckets = useMemo(() => {
-    const b = [
-      { label: "0-20", min: 0, max: 20, count: 0 },
-      { label: "21-40", min: 21, max: 40, count: 0 },
-      { label: "41-60", min: 41, max: 60, count: 0 },
-      { label: "61-80", min: 61, max: 80, count: 0 },
-      { label: "81-100", min: 81, max: 100, count: 0 },
-    ];
-    filtered.forEach((s) => {
-      const sc = Math.round(clamp(s.codesyncScore ?? 0));
-      const bucket = b.find((x) => sc >= x.min && sc <= x.max);
-      if (bucket) bucket.count += 1;
-    });
-    return b;
-  }, [filtered]);
-
-  const top5 = useMemo(
-    () => [...filtered].sort((a, b) => (b.codesyncScore ?? 0) - (a.codesyncScore ?? 0)).slice(0, 5),
-    [filtered]
-  );
-
-  const risk5 = useMemo(
-    () => [...filtered].sort((a, b) => (a.codesyncScore ?? 0) - (b.codesyncScore ?? 0)).slice(0, 5),
-    [filtered]
-  );
-
-  const sortedRows = useMemo(() => {
-    const dir = sortDir === "asc" ? 1 : -1;
-
-    const keyFn = (s: Student) => {
-      switch (sortKey) {
-        case "name":
-          return safeStr(s.name).toLowerCase();
-        case "branch":
-          return safeStr(s.branch).toLowerCase();
-        case "section":
-          return safeStr(s.section).toLowerCase();
-        case "year":
-          return parseInt(safeStr(s.year) || "0");
-        case "active":
-          return s.activeThisWeek ? 1 : 0;
-        case "score":
-        default:
-          return clamp(s.codesyncScore ?? 0);
-      }
-    };
-
-    return [...filtered].sort((a, b) => {
-      const A: any = keyFn(a);
-      const B: any = keyFn(b);
-      if (A < B) return -1 * dir;
-      if (A > B) return 1 * dir;
-      return 0;
-    });
-  }, [filtered, sortKey, sortDir]);
-
-  const toggleSort = (k: SortKey) => {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir(k === "name" ? "asc" : "desc");
-    }
+  /* ========== REFRESH ========== */
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchDashboard();
+    setRefreshing(false);
   };
 
-  const exportCsv = () => {
-    const rows = sortedRows.map((s) => {
-      const score = clamp(s.codesyncScore ?? 0);
-      const prev = typeof s.prevScore === "number" ? clamp(s.prevScore) : null;
-      return {
-        id: s.id,
-        name: s.name,
-        branch: s.branch ?? "",
-        section: s.section ?? "",
-        year: s.year ?? "",
-        codesyncScore: score,
-        activeThisWeek: s.activeThisWeek ? "yes" : "no",
-        lastActiveAt: s.lastActiveAt ?? "",
-        prevScore: prev ?? "",
-        delta: prev === null ? "" : score - prev,
-      };
-    });
+  /* ========== RENDER ========== */
 
-    downloadCSV(`codesync_instructor_students_${new Date().toISOString().slice(0, 10)}.csv`, rows);
-  };
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-[#0a0e27] to-slate-950 text-slate-100 flex items-center justify-center relative overflow-hidden">
+        {/* Background glows */}
+        <div className="pointer-events-none absolute inset-0">
+          <motion.div
+            animate={{
+              opacity: [0.3, 0.5, 0.3],
+            }}
+            transition={{ duration: 4, repeat: Infinity }}
+            className="absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.3),_transparent_70%)] blur-3xl"
+          />
+          <motion.div
+            animate={{
+              opacity: [0.3, 0.5, 0.3],
+            }}
+            transition={{ duration: 4, delay: 1, repeat: Infinity }}
+            className="absolute -bottom-40 right-1/4 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,_rgba(168,85,247,0.3),_transparent_70%)] blur-3xl"
+          />
+        </div>
 
-  /* =========================
-     DRAWER: use backend stats
-     ========================= */
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="relative z-10 flex flex-col items-center gap-6"
+        >
+          <motion.div
+            animate={{ rotate: 360, scale: [1, 1.1, 1] }}
+            transition={{
+              rotate: { duration: 2, repeat: Infinity, ease: "linear" },
+              scale: { duration: 2, repeat: Infinity },
+            }}
+            className="h-24 w-24 rounded-3xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 opacity-80 blur-lg shadow-[0_0_40px_rgba(59,130,246,0.6)]"
+          />
+          <div className="text-center space-y-2">
+            <motion.p
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="text-sm uppercase tracking-widest text-slate-400"
+            >
+              Loading Dashboard
+            </motion.p>
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              CodeSync Instructor
+            </h2>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
-  const drawerScore = useMemo(() => {
-    const s = selectedStats?.cpScores?.displayScore;
-    if (typeof s === "number" && Number.isFinite(s)) return clamp(s);
-    return clamp(selected?.codesyncScore ?? 0);
-  }, [selectedStats, selected]);
-
-  const drawerSignals = useMemo(() => {
-    const out: Record<PlatformId, number> = {
-      leetcode: 0,
-      codeforces: 0,
-      codechef: 0,
-      github: 0,
-      hackerrank: 0,
-      atcoder: 0,
-    };
-    PLATFORMS.forEach((p) => {
-      const v = selectedStats?.platformSignals?.[p];
-      out[p] = typeof v === "number" && Number.isFinite(v) ? clamp(v) : 0;
-    });
-    return out;
-  }, [selectedStats]);
-
-  const drawerPlatformTotals = useMemo(() => {
-    const out: Record<PlatformId, number> = {
-      leetcode: 0,
-      codeforces: 0,
-      codechef: 0,
-      github: 0,
-      hackerrank: 0,
-      atcoder: 0,
-    };
-    PLATFORMS.forEach((p) => {
-      const v = selectedStats?.platformWiseScores?.[p]?.total;
-      out[p] = typeof v === "number" && Number.isFinite(v) ? clamp(v) : 0;
-    });
-    return out;
-  }, [selectedStats]);
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-[#0a0e27] to-slate-950 text-slate-100 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-md text-center"
+        >
+          <RiCloseCircleLine className="mx-auto text-5xl text-red-400 mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Error Loading Dashboard</h2>
+          <p className="text-slate-400 mb-6 text-sm">{error}</p>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleRefresh}
+            className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all font-semibold shadow-lg"
+          >
+            Try Again
+          </motion.button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
-    <div className={`min-h-screen ${BG} text-slate-100`}>
-      {/* glow bg */}
-      <div className="pointer-events-none fixed inset-0 opacity-70">
-        <div className="absolute -top-24 left-1/2 h-72 w-[46rem] -translate-x-1/2 rounded-full bg-sky-500/10 blur-3xl" />
-        <div className="absolute top-40 -left-24 h-72 w-72 rounded-full bg-fuchsia-500/10 blur-3xl" />
-        <div className="absolute bottom-10 right-0 h-72 w-96 rounded-full bg-rose-500/10 blur-3xl" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-[#0a0e27] to-slate-950 text-slate-100 relative overflow-hidden">
+      {/* Background elements */}
+      <div className="pointer-events-none absolute inset-0">
+        <motion.div
+          animate={{
+            x: [0, 50, -30, 0],
+            y: [0, 30, -50, 0],
+          }}
+          transition={{ duration: 20, repeat: Infinity }}
+          className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.25),_transparent_70%)] blur-3xl"
+        />
+        <motion.div
+          animate={{
+            x: [0, -40, 30, 0],
+            y: [0, -30, 50, 0],
+          }}
+          transition={{ duration: 25, repeat: Infinity }}
+          className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,_rgba(168,85,247,0.25),_transparent_70%)] blur-3xl"
+        />
+        <motion.div
+          animate={{
+            x: [0, 20, -20, 0],
+          }}
+          transition={{ duration: 30, repeat: Infinity }}
+          className="absolute top-1/2 left-1/2 h-64 w-64 rounded-full bg-[radial-gradient(circle_at_center,_rgba(236,72,153,0.2),_transparent_70%)] blur-3xl -translate-x-1/2 -translate-y-1/2"
+        />
+
+        {/* Grid */}
+        <div className="absolute inset-0 opacity-5 bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)] bg-[size:80px_80px]" />
       </div>
 
-      <div className="relative mx-auto max-w-[1600px] px-2 sm:px-4 lg:px-6 py-6">
-        {/* Header */}
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <GlowTitle
-              title="Instructor Dashboard"
-              subtitle="Cohort health, branch-wise performance and student drill-down — in one view."
-            />
-            <div className="mt-2 text-xs text-slate-500">
-              Last sync:{" "}
-              {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : loading ? "Loading…" : "—"}
+      <main className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        {/* ==================== HEADER ==================== */}
+        <motion.section
+          initial={{ opacity: 0, y: -30 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-10"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <motion.div
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  className="relative"
+                >
+                  <div className="h-14 w-14 rounded-3xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.6)]">
+                    <RiTeamLine className="text-2xl text-white" />
+                  </div>
+                </motion.div>
+                <div>
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    Instructor Dashboard
+                  </h1>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Real-time cohort intelligence with premium analytics
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative">
-              <RiSearch2Line className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search: name / id / branch / section…"
-                className="w-[22rem] sm:w-96 rounded-full border border-slate-800 bg-slate-950/60 pl-9 pr-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-sky-500/50 focus:shadow-[0_0_0_3px_rgba(56,189,248,0.12)]"
-              />
-            </div>
-
-            <button
-              onClick={exportCsv}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-800 bg-slate-950/60 px-4 py-2 text-sm hover:bg-slate-900/60 transition"
-              type="button"
-            >
-              <RiDownload2Line /> Export CSV
-            </button>
-
-            <button
-              onClick={triggerRefresh}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleRefresh}
               disabled={refreshing}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-800 bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400 px-4 py-2 text-sm font-semibold text-black hover:brightness-110 transition disabled:opacity-70"
-              type="button"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 font-semibold shadow-lg"
             >
-              <RiRefreshLine />
-              {refreshing ? "Refreshing…" : "Refresh cohort"}
-            </button>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className={`${CARD} p-4 mb-5`}>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">Filters</div>
-              <div className="mt-1 text-xs text-slate-500">Branch / Section / Year</div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Chip
-                active={branch === "all" && section === "all" && year === "all"}
-                onClick={() => {
-                  setBranch("all");
-                  setSection("all");
-                  setYear("all");
+              <motion.div
+                animate={{ rotate: refreshing ? 360 : 0 }}
+                transition={{
+                  duration: 1,
+                  repeat: refreshing ? Infinity : 0,
                 }}
               >
-                Reset
-              </Chip>
-              <Chip onClick={() => fetchDashboard()}>Apply</Chip>
-            </div>
+                <RiRefreshLine className="text-lg" />
+              </motion.div>
+              {refreshing ? "Syncing..." : "Sync Now"}
+            </motion.button>
           </div>
+        </motion.section>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div>
-              <div className="mb-2 text-xs text-slate-400">Branch</div>
-              <div className="flex flex-wrap gap-2">
-                {options.branches.slice(0, 14).map((b) => (
-                  <Chip key={b} active={branch === b} onClick={() => setBranch(b)}>
-                    {b === "all" ? "All" : b}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 text-xs text-slate-400">Section</div>
-              <div className="flex flex-wrap gap-2">
-                {options.sections.slice(0, 14).map((s) => (
-                  <Chip key={s} active={section === s} onClick={() => setSection(s)}>
-                    {s === "all" ? "All" : `Sec ${s}`}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 text-xs text-slate-400">Year</div>
-              <div className="flex flex-wrap gap-2">
-                {options.years.map((y) => (
-                  <Chip key={y} active={year === y} onClick={() => setYear(y)}>
-                    {y === "all" ? "All" : `Year ${y}`}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 text-xs text-slate-500">
-            Showing <span className="text-slate-200">{filtered.length}</span> students.
-          </div>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <StatCard label="Students" value={String(kpis.total)} hint="Filtered cohort count" icon={<RiTeamLine className="text-lg" />} tone="sky" />
-          <StatCard label="Active (week)" value={String(kpis.active)} hint={`${Math.round(pct(kpis.active, kpis.total))}% active`} icon={<RiPulseLine className="text-lg" />} tone="emerald" />
-          <StatCard label="Inactive" value={String(kpis.inactive)} hint="Needs follow-up" icon={<RiAlarmWarningLine className="text-lg" />} tone="rose" />
-          <StatCard
-            label="Average"
-            value={`${fmt(kpis.avg)} / 100`}
-            hint={kpis.deltaAvg === null ? "Mean score" : `Avg change: ${kpis.deltaAvg >= 0 ? "+" : ""}${kpis.deltaAvg.toFixed(1)}`}
-            icon={<RiBarChart2Line className="text-lg" />}
-            tone="fuchsia"
-          />
-          <StatCard label="Median" value={`${fmt(kpis.med)} / 100`} hint="Robust benchmark" icon={<RiBarChart2Line className="text-lg" />} tone="amber" />
-          <StatCard label="P90" value={`${fmt(kpis.p90)} / 100`} hint="Top 10% benchmark" icon={<RiTrophyLine className="text-lg" />} tone="sky" />
-        </div>
-
-        {/* Breakdown */}
-        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className={`${CARD} p-4`}>
-            <div className="text-sm font-semibold text-slate-100">By Branch</div>
-            <div className="mt-4 space-y-3">
-              {byBranch.slice(0, 7).map((x) => (
-                <BarRow key={x.label} label={x.label} value={pct(x.count, kpis.total)} right={<span>{x.count}</span>} />
-              ))}
-              {!byBranch.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
-            </div>
-          </div>
-
-          <div className={`${CARD} p-4`}>
-            <div className="text-sm font-semibold text-slate-100">By Section</div>
-            <div className="mt-4 space-y-3">
-              {bySection.slice(0, 7).map((x) => (
-                <BarRow
-                  key={x.label}
-                  label={x.label === "Unknown" ? "Unknown" : `Sec ${x.label}`}
-                  value={pct(x.count, kpis.total)}
-                  right={<span>{x.count}</span>}
-                />
-              ))}
-              {!bySection.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
-            </div>
-          </div>
-
-          <div className={`${CARD} p-4`}>
-            <div className="text-sm font-semibold text-slate-100">By Year</div>
-            <div className="mt-4 space-y-3">
-              {byYear.slice(0, 7).map((x) => (
-                <BarRow
-                  key={x.label}
-                  label={x.label === "Unknown" ? "Unknown" : `Year ${x.label}`}
-                  value={pct(x.count, kpis.total)}
-                  right={<span>{x.count}</span>}
-                />
-              ))}
-              {!byYear.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
-            </div>
-          </div>
-        </div>
-
-        {/* Distribution */}
-        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className={`${CARD} p-4`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-slate-100">Score distribution</div>
-                <div className="text-xs text-slate-500">Cohort spread across score bands</div>
-              </div>
-              <RiBarChart2Line className="text-slate-400" />
-            </div>
-            <div className="mt-4 space-y-3">
-              {buckets.map((b) => (
-                <BarRow key={b.label} label={b.label} value={pct(b.count, kpis.total)} right={<span>{b.count}</span>} />
-              ))}
-            </div>
-          </div>
-
-          <div className={`${CARD} p-4`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-slate-100">Platform mix</div>
-                <div className="text-xs text-slate-500">
-                  Uses dashboard payload (quick). Drawer shows real platform scores.
-                </div>
-              </div>
-              <RiFireLine className="text-slate-400" />
-            </div>
-
-            {/* simple quick avg bars from dashboard (may be 0 if you don't store signals there) */}
-            <div className="mt-4 space-y-3">
-              {PLATFORMS.map((p) => {
-                const avg =
-                  filtered.reduce((a, s) => a + (s.platforms?.[p] ?? 0), 0) / Math.max(1, filtered.length);
-                return (
-                  <BarRow
-                    key={p}
-                    label={PLATFORM_LABEL[p]}
-                    value={clamp(avg)}
-                    right={<span className="tabular-nums">{Math.round(avg)}</span>}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Top + At-risk */}
-        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className={`${CARD} p-4`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-slate-100">Top performers</div>
-                <div className="text-xs text-slate-500">Best scores in current filter</div>
-              </div>
-              <RiTrophyLine className="text-slate-300" />
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {top5.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => openStudent(s)}
-                  className="w-full text-left flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 hover:bg-slate-900/50 transition"
-                  type="button"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate text-slate-100">{s.name}</div>
-                    <div className="text-xs text-slate-500 truncate">
-                      {s.branch ?? "—"} • Sec {s.section ?? "—"} • Year {s.year ?? "—"}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-sm font-semibold tabular-nums text-slate-100">{Math.round(s.codesyncScore ?? 0)}</div>
-                    <RiArrowRightUpLine className="text-slate-400" />
-                  </div>
-                </button>
-              ))}
-              {!top5.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
-            </div>
-          </div>
-
-          <div className={`${CARD} p-4`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-slate-100">At-risk list</div>
-                <div className="text-xs text-slate-500">Low score / inactive students</div>
-              </div>
-              <RiAlarmWarningLine className="text-rose-300" />
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {risk5.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => openStudent(s)}
-                  className="w-full text-left flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 hover:bg-slate-900/50 transition"
-                  type="button"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate text-slate-100">{s.name}</div>
-                    <div className="text-xs text-slate-500 truncate">
-                      {s.activeThisWeek ? "Active" : "Inactive"} • {s.branch ?? "—"} • Year {s.year ?? "—"}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-sm font-semibold tabular-nums text-slate-100">{Math.round(s.codesyncScore ?? 0)}</div>
-                    <RiArrowRightUpLine className="text-slate-400" />
-                  </div>
-                </button>
-              ))}
-              {!risk5.length && !loading ? <div className="text-sm text-slate-500">No data.</div> : null}
-            </div>
-          </div>
-        </div>
-
-        {/* Student Table */}
-        <div className={`mt-5 ${CARD} overflow-hidden`}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-4 border-b border-slate-800">
-            <div>
-              <div className="text-sm font-semibold text-slate-100">Students</div>
-              <div className="text-xs text-slate-500">Click a student to open quick view.</div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-900/60 transition"
-                onClick={() => {
-                  setSortKey("score");
-                  setSortDir("desc");
-                }}
-                type="button"
-              >
-                Sort: Top score
-              </button>
-              <button
-                className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-900/60 transition"
-                onClick={() => {
-                  setSortKey("active");
-                  setSortDir("desc");
-                }}
-                type="button"
-              >
-                Sort: Active
-              </button>
-              <button
-                className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-900/60 transition"
-                onClick={() => fetchDashboard()}
-                type="button"
-              >
-                Refresh view
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-slate-950/60">
-                <tr className="text-left text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("name")}>Student</th>
-                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("branch")}>Branch</th>
-                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("section")}>Section</th>
-                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("year")}>Year</th>
-                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("score")}>Score</th>
-                  <th className="px-4 py-3 cursor-pointer select-none" onClick={() => toggleSort("active")}>Status</th>
-                  <th className="px-4 py-3">Platforms</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {sortedRows.map((s) => {
-                  const score = clamp(s.codesyncScore ?? 0);
-                  const delta = typeof s.prevScore === "number" ? score - clamp(s.prevScore) : null;
-
-                  return (
-                    <tr
-                      key={s.id}
-                      className="border-t border-slate-800/70 hover:bg-slate-900/40 transition cursor-pointer"
-                      onClick={() => openStudent(s)}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-100">{s.name}</div>
-                        <div className="text-xs text-slate-500">
-                          {s.id} • {s.branch ?? "—"} • Sec {s.section ?? "—"}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3 text-sm text-slate-200">{s.branch ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm text-slate-200">{s.section ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm text-slate-200">{s.year ?? "—"}</td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-2 w-28 rounded-full bg-slate-800/70 overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400"
-                              style={{ width: `${score}%` }}
-                            />
-                          </div>
-                          <div className="text-sm font-semibold tabular-nums text-slate-100">{Math.round(score)}</div>
-                          {delta !== null ? (
-                            <span className={["text-xs tabular-nums", delta >= 0 ? "text-emerald-300" : "text-rose-300"].join(" ")}>
-                              {delta >= 0 ? "+" : ""}
-                              {Math.round(delta)}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={[
-                            "inline-flex rounded-full border px-3 py-1 text-[0.7rem]",
-                            s.activeThisWeek ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-slate-700 bg-slate-950/60 text-slate-300",
-                          ].join(" ")}
-                        >
-                          {s.activeThisWeek ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <PlatformMini platforms={s.platforms} />
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {!loading && sortedRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
-                      No students found.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className={`mt-5 ${CARD} p-4`}>
-          <div className="text-xs text-slate-400">
-            ✅ Drawer uses backend fields:{" "}
-            <span className="text-slate-200">platformSignals / platformNumbers / platformWiseScores</span>{" "}
-            from <span className="text-slate-200">/instructor/student/:id/stats</span>.
-          </div>
-        </div>
-      </div>
-
-      {/* Drawer */}
-      <AnimatePresence>
-        {selected ? (
-          <>
+        {/* ==================== STATS GRID ==================== */}
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ staggerChildren: 0.1 }}
+          className="mb-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+        >
+          {[
+            {
+              label: "Total Students",
+              value: stats.total,
+              icon: RiTeamLine,
+              gradient: "from-blue-500/20 to-blue-600/20",
+              accentColor: "text-blue-400",
+            },
+            {
+              label: "Total Score",
+              value: Math.round(stats.totalScore),
+              icon: RiTrophyLine,
+              gradient: "from-yellow-500/20 to-yellow-600/20",
+              accentColor: "text-yellow-400",
+            },
+            {
+              label: "Average Score",
+              value: stats.avgScore.toFixed(1),
+              icon: RiBarChartLine,
+              gradient: "from-purple-500/20 to-purple-600/20",
+              accentColor: "text-purple-400",
+            },
+            {
+              label: "Linked Handles",
+              value: stats.linkedCount,
+              icon: RiFireLine,
+              gradient: "from-pink-500/20 to-pink-600/20",
+              accentColor: "text-pink-400",
+            },
+          ].map((stat, i) => (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-              onClick={() => {
-                setSelected(null);
-                setSelectedStats(null);
-              }}
-            />
-
-            <motion.aside
-              initial={{ x: 520, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 520, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 260, damping: 26 }}
-              className="fixed right-0 top-0 z-50 h-full w-full sm:w-[560px] border-l border-slate-800 bg-[#050509] p-4 overflow-y-auto"
+              key={i}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              whileHover={{ y: -5, scale: 1.02 }}
+              className={`relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br ${stat.gradient} backdrop-blur-xl p-6 group`}
             >
-              {/* header */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-lg font-semibold text-slate-50 truncate">
-                    {selectedStats?.profile?.name ?? selected.name}
-                  </div>
-                  <div className="text-sm text-slate-400 truncate">
-                    {selected.id} • {selected.branch ?? "—"} • Sec {selected.section ?? "—"} • Year {selected.year ?? "—"}
-                  </div>
-                </div>
+              {/* Animated gradient border */}
+              <motion.div
+                animate={{
+                  background: [
+                    "linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent)",
+                    "linear-gradient(45deg, transparent, rgba(255,255,255,0.05), transparent)",
+                  ],
+                }}
+                transition={{ duration: 3, repeat: Infinity }}
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              />
 
-                <button
-                  onClick={() => {
-                    setSelected(null);
-                    setSelectedStats(null);
-                  }}
-                  className="h-9 w-9 rounded-full border border-slate-800 bg-slate-950/60 flex items-center justify-center hover:bg-slate-900/60 transition"
-                  type="button"
+              <div className="relative flex items-center justify-between">
+                <div className="flex-1">
+                  <p className="text-xs sm:text-sm text-slate-400 mb-1 font-medium">
+                    {stat.label}
+                  </p>
+                  <p className="text-3xl sm:text-4xl font-bold">
+                    {stat.value}
+                  </p>
+                </div>
+                <div
+                  className={`flex-shrink-0 h-14 w-14 rounded-xl bg-slate-900/50 flex items-center justify-center ${stat.accentColor} shadow-lg`}
                 >
-                  <RiCloseLine className="text-slate-200" />
-                </button>
-              </div>
-
-              {/* mini strip */}
-              <div className={`mt-3 ${CARD} p-3`}>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-slate-200">
-                    <RiUser3Line /> {selectedStats?.profile?.name ?? selected.name}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-slate-300">
-                    <RiHashtag /> {selected.id}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-slate-300">
-                    <RiTimeLine /> {niceDate(selectedStats?.cpScores?.updatedAt ?? selectedStats?.profile?.updatedAt ?? selected.lastActiveAt)}
-                  </span>
+                  <stat.icon className="text-2xl" />
                 </div>
               </div>
+            </motion.div>
+          ))}
+        </motion.section>
 
-              {/* score + activity */}
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className={`${CARD} p-3`}>
-                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">CodeSyncScore</div>
-                  <div className="mt-1 text-2xl font-semibold text-slate-50">{Math.round(drawerScore)}</div>
-                  <div className="mt-2 h-2 rounded-full bg-slate-800/70 overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400"
-                      style={{ width: `${drawerScore}%` }}
-                    />
-                  </div>
+        {/* ==================== SEARCH & SORT ==================== */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="mb-8 flex flex-col sm:flex-row gap-4 items-center"
+        >
+          <div className="relative flex-1 w-full">
+            <RiSearchLine className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-lg" />
+            <input
+              type="text"
+              placeholder="Search by name, email, or coding handle..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700/50 focus:border-blue-500/50 focus:bg-slate-900/70 outline-none transition-all text-slate-100 placeholder:text-slate-500"
+            />
+          </div>
 
-                  {typeof selectedStats?.cpScores?.prevDisplayScore === "number" ? (
-                    <div className="mt-2 text-xs text-slate-400">
-                      Previous: {Math.round(selectedStats.cpScores.prevDisplayScore)} • Delta:{" "}
-                      <span
-                        className={
-                          drawerScore - clamp(selectedStats.cpScores.prevDisplayScore) >= 0
-                            ? "text-emerald-300"
-                            : "text-rose-300"
-                        }
-                      >
-                        {drawerScore - clamp(selectedStats.cpScores.prevDisplayScore) >= 0 ? "+" : ""}
-                        {Math.round(drawerScore - clamp(selectedStats.cpScores.prevDisplayScore))}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-xs text-slate-500">No previous snapshot.</div>
-                  )}
-                </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+            {[
+              { label: "Top Scores", value: "score" },
+              { label: "A-Z", value: "name" },
+              { label: "Recent Activity", value: "recent" },
+            ].map((option) => (
+              <motion.button
+                key={option.value}
+                onClick={() => setSortBy(option.value as any)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`px-4 py-2 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
+                  sortBy === option.value
+                    ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.5)]"
+                    : "bg-slate-800/50 text-slate-300 hover:bg-slate-800"
+                }`}
+              >
+                {option.label}
+              </motion.button>
+            ))}
+          </div>
+        </motion.section>
 
-                <div className={`${CARD} p-3`}>
-                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">Cohort Signals</div>
-                  <div className="mt-2 text-xs text-slate-500">
-                    Platform sum:{" "}
-                    <span className="text-slate-200 tabular-nums">
-                      {Math.round(selectedStats?.platformSum ?? 0)}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    Platform avg:{" "}
-                    <span className="text-slate-200 tabular-nums">
-                      {Math.round(selectedStats?.overallFromPlatforms ?? 0)}
-                    </span>
-                  </div>
-                  <div className="mt-3 text-xs text-slate-500">
-                    Last active:{" "}
-                    <span className="text-slate-200">{niceDate(selected.lastActiveAt)}</span>
-                  </div>
-                </div>
+        {/* ==================== STUDENTS GRID ==================== */}
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="space-y-4"
+        >
+          <div className="text-sm text-slate-400 mb-4 flex items-center justify-between">
+            <span>Showing {filteredStudents.length} of {students.length} students</span>
+          </div>
+
+          <AnimatePresence mode="popLayout">
+            {filteredStudents.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredStudents.map((student, index) => (
+                  <StudentCard
+                    key={student.id}
+                    student={student}
+                    index={index}
+                    isSelected={selectedStudent?.id === student.id}
+                    onSelect={() => openStudent(student)}
+                  />
+                ))}
               </div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-center py-12"
+              >
+                <RiSearchLine className="mx-auto text-4xl text-slate-600 mb-4" />
+                <p className="text-slate-400">No students found</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.section>
+      </main>
 
-              {/* contact */}
-              {(selectedStats?.profile?.email || selectedStats?.profile?.phone || selected.email || selected.phone) ? (
-                <div className={`mt-3 ${CARD} p-3`}>
-                  <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">Contact</div>
-                  <div className="mt-2 space-y-2 text-sm text-slate-200">
-                    {(selectedStats?.profile?.email ?? selected.email) ? (
-                      <div className="flex items-center gap-2">
-                        <RiMailLine className="text-slate-400" /> {selectedStats?.profile?.email ?? selected.email}
-                      </div>
-                    ) : null}
-                    {(selectedStats?.profile?.phone ?? selected.phone) ? (
-                      <div className="flex items-center gap-2">
-                        <RiPhoneLine className="text-slate-400" /> {selectedStats?.profile?.phone ?? selected.phone}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-
-              {/* platforms */}
-              <div className="mt-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-100">Platform-wise scores (detailed)</div>
-                    <div className="text-xs text-slate-500">Uses backend: platformWiseScores + platformSignals + platformNumbers</div>
-                  </div>
-                  <RiFireLine className="text-slate-400" />
-                </div>
-
-                <div className="mt-3">
-                  {statsLoading ? (
-                    <div className={`${CARD} p-4 text-sm text-slate-400`}>Loading platform data…</div>
-                  ) : !selectedStats ? (
-                    <div className={`${CARD} p-4 text-sm text-slate-500`}>
-                      No platform stats found. (Check cpProfiles subcollection + stats route.)
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {PLATFORMS.map((pid) => {
-                        const handle = selectedStats?.cpHandles?.[pid] ?? null;
-                        const numbers = selectedStats?.platformNumbers?.[pid] ?? null;
-                        const chips = numberChips(pid, numbers);
-
-                        const total = drawerPlatformTotals[pid];        // from platformWiseScores.total
-                        const signal = drawerSignals[pid];              // from platformSignals
-
-                        const parts = selectedStats?.platformWiseScores?.[pid]?.parts ?? null;
-                        const partEntries = parts ? Object.entries(parts).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)) : [];
-
-                        return (
-                          <div key={pid} className={`${CARD} p-3`}>
-                            {/* header row */}
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <div className="text-sm font-semibold text-slate-100">
-                                    {PLATFORM_LABEL[pid]}
-                                  </div>
-                                  {handle ? (
-                                    <span className="text-[0.72rem] text-slate-400 truncate">@{handle}</span>
-                                  ) : (
-                                    <span className="text-[0.72rem] text-slate-500">no username</span>
-                                  )}
-                                </div>
-
-                                {chips.length ? (
-                                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                                    {chips.map((c) => (
-                                      <span
-                                        key={`${pid}-${c.k}`}
-                                        className="rounded-full border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-slate-200"
-                                      >
-                                        {c.k} {c.v}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="mt-2 text-xs text-slate-500">
-                                    {numbers ? "stats present" : "missing platformNumbers"}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="text-right">
-                                <div className="text-[0.7rem] text-slate-500">total / signal</div>
-                                <div className="text-sm font-semibold text-slate-100 tabular-nums">
-                                  {Math.round(total)}{" "}
-                                  <span className="text-slate-500">·</span>{" "}
-                                  {Math.round(signal)}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* total bar */}
-                            <div className="mt-3">
-                              <div className="flex items-center justify-between text-[0.7rem] text-slate-500">
-                                <span>Platform total</span>
-                                <span className="tabular-nums">{Math.round(total)}/100</span>
-                              </div>
-                              <div className="mt-1 h-2 rounded-full bg-slate-800/60 overflow-hidden">
-                                <div
-                                  className="h-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400"
-                                  style={{ width: `${clamp(total)}%` }}
-                                />
-                              </div>
-                            </div>
-
-                            {/* parts breakdown */}
-                            {partEntries.length ? (
-                              <div className="mt-3 space-y-2">
-                                <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-                                  Score parts
-                                </div>
-
-                                {partEntries.slice(0, 5).map(([k, v]) => (
-                                  <div key={`${pid}-part-${k}`} className="flex items-center justify-between">
-                                    <div className="text-xs text-slate-300">{k}</div>
-                                    <div className="text-xs text-slate-300 tabular-nums">{Math.round(v)}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="mt-3 text-xs text-slate-500">
-                                No breakdown parts returned (platformWiseScores.parts missing).
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* handles panel */}
-              {selectedStats?.cpHandles ? (
-                <div className={`mt-3 ${CARD} p-3`}>
-                  <div className="flex items-center justify-between">
-                    <div className="text-[0.7rem] uppercase tracking-[0.14em] text-slate-400">
-                      Linked handles
-                    </div>
-                    <RiLinksLine className="text-slate-500" />
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                    {PLATFORMS.map((p) => (
-                      <div key={p} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
-                        <div className="text-slate-500 capitalize">{p}</div>
-                        <div className="mt-0.5 text-slate-200 truncate">
-                          {selectedStats.cpHandles?.[p] ? `@${selectedStats.cpHandles[p]}` : "—"}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {/* footer buttons */}
-              <div className="mt-5 flex items-center gap-2">
-                <button
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-slate-800 bg-slate-950/60 px-4 py-2 text-sm hover:bg-slate-900/60 transition"
-                  type="button"
-                  onClick={() => window.location.assign(`/student/${selected.id}`)}
-                >
-                  Open profile <RiArrowRightUpLine />
-                </button>
-
-                <button
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-800 bg-gradient-to-r from-sky-400 via-fuchsia-400 to-rose-400 px-4 py-2 text-sm font-semibold text-black hover:brightness-110 transition"
-                  type="button"
-                  onClick={() => alert("Next: add instructor notes / messaging.")}
-                >
-                  Quick Action
-                </button>
-              </div>
-            </motion.aside>
-          </>
-        ) : null}
+      {/* ==================== SELECTED STUDENT MODAL ==================== */}
+      <AnimatePresence>
+        {selectedStudent && (
+          <StudentDetailModal
+            student={selectedStudent}
+            stats={selectedStats}
+            statsLoading={statsLoading}
+            onClose={() => {
+              setSelectedStudent(null);
+              setSelectedStats(null);
+            }}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
+};
+
+/* ============================================================================
+ * STUDENT CARD COMPONENT
+ * ============================================================================ */
+
+interface StudentCardProps {
+  student: Student;
+  index: number;
+  isSelected: boolean;
+  onSelect: () => void;
 }
+
+const StudentCard: React.FC<StudentCardProps> = ({
+  student,
+  index,
+  isSelected,
+  onSelect,
+}) => {
+  const displayScore = Math.min(Math.max(student.cpScores?.displayScore ?? student.displayScore ?? 0, 0), 100);
+  const linkedPlatforms = Object.entries(student.cpHandles || {})
+    .filter(([, handle]) => handle)
+    .map(([platform]) => platform as PlatformId);
+
+  const platformSkills = student.cpScores?.platformSkills || {};
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ delay: index * 0.05 }}
+      onClick={onSelect}
+      whileHover={{ y: -4, scale: 1.02 }}
+      className={`relative overflow-hidden rounded-2xl border transition-all cursor-pointer group ${
+        isSelected
+          ? "border-blue-500/70 bg-gradient-to-br from-blue-600/20 to-purple-600/20 shadow-[0_0_40px_rgba(59,130,246,0.4)]"
+          : "border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-600/70 shadow-lg"
+      }`}
+    >
+      {/* Animated gradient background */}
+      {isSelected && (
+        <motion.div
+          animate={{
+            opacity: [0.3, 0.5, 0.3],
+          }}
+          transition={{ duration: 3, repeat: Infinity }}
+          className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10"
+        />
+      )}
+
+      <div className="relative p-6 backdrop-blur-sm space-y-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-2">
+              <motion.div
+                whileHover={{ scale: 1.1 }}
+                className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center font-bold text-base flex-shrink-0"
+              >
+                {student.name?.charAt(0).toUpperCase()}
+              </motion.div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-lg truncate">{student.name}</h3>
+                <p className="text-xs text-slate-400 truncate">
+                  {student.branch}
+                  {student.section && ` • Sec ${student.section}`}
+                  {student.year && ` • Year ${student.year}`}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Score */}
+          <motion.div
+            whileHover={{ scale: 1.15 }}
+            className="text-right flex-shrink-0"
+          >
+            <p className="text-xs text-slate-400 mb-1">Score</p>
+            <p className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
+              {Math.round(displayScore)}
+            </p>
+          </motion.div>
+        </div>
+
+        {/* Platform Skills Grid */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {PLATFORMS.map((platform) => {
+            const skill = platformSkills[platform] ?? 0;
+            const hasHandle = student.cpHandles?.[platform];
+            return (
+              <motion.div
+                key={platform}
+                whileHover={{ scale: 1.05, y: -2 }}
+                className={`rounded-lg p-2 text-center transition-all border text-xs ${
+                  hasHandle
+                    ? "border-slate-600/50 bg-slate-900/40"
+                    : "border-slate-800/30 bg-slate-950/30"
+                }`}
+              >
+                <p className="font-semibold text-slate-200 text-sm">
+                  {skill > 0 ? Math.round(skill) : "—"}
+                </p>
+                <p className="text-[0.6rem] text-slate-500 capitalize">{platform.slice(0, 4)}</p>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-700/30">
+          <span>{linkedPlatforms.length} platforms linked</span>
+          <motion.span
+            whileHover={{ x: 2 }}
+            className="flex items-center gap-1 text-slate-500 group-hover:text-slate-300 transition-colors"
+          >
+            Click to expand <RiArrowRightUpLine className="text-sm" />
+          </motion.span>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+/* ============================================================================
+ * STUDENT DETAIL MODAL
+ * ============================================================================ */
+
+interface StudentDetailModalProps {
+  student: Student;
+  stats: StudentStatsResponse | null;
+  statsLoading: boolean;
+  onClose: () => void;
+}
+
+const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
+  student,
+  stats,
+  statsLoading,
+  onClose,
+}) => {
+  const displayScore = Math.min(Math.max(student.cpScores?.displayScore ?? student.displayScore ?? 0, 0), 100);
+  const platformSkills = stats?.cpScores?.platformSkills || student.cpScores?.platformSkills || {};
+
+  const maxSkill = Math.max(1, ...Object.values(platformSkills).map(v => v ?? 0));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl rounded-3xl border border-slate-700/50 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 shadow-[0_0_60px_rgba(59,130,246,0.4)] overflow-hidden max-h-[90vh] overflow-y-auto"
+      >
+        {/* Animated background */}
+        <motion.div
+          animate={{
+            opacity: [0.3, 0.5, 0.3],
+          }}
+          transition={{ duration: 4, repeat: Infinity }}
+          className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10"
+        />
+
+        {/* Close button */}
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-slate-800/50 hover:bg-slate-700 flex items-center justify-center transition-colors"
+        >
+          <RiCloseLine className="text-lg" />
+        </motion.button>
+
+        {/* Content */}
+        <div className="relative p-8 space-y-6">
+          {/* Header */}
+          <div className="flex items-center gap-4 pb-6 border-b border-slate-700/30">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center font-bold text-2xl flex-shrink-0"
+            >
+              {student.name?.charAt(0).toUpperCase()}
+            </motion.div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-2xl font-bold">{student.name}</h2>
+              <p className="text-sm text-slate-400">
+                {student.branch}
+                {student.section && ` • Section ${student.section}`}
+                {student.year && ` • Year ${student.year}`}
+              </p>
+            </div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="text-right flex-shrink-0"
+            >
+              <p className="text-xs text-slate-400">Score</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
+                {Math.round(displayScore)}
+              </p>
+            </motion.div>
+          </div>
+
+          {/* Contact Info */}
+          {(student.email || student.phone) && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-300">Contact Information</h3>
+              <div className="space-y-2">
+                {student.email && (
+                  <div className="flex items-center gap-3 text-sm p-3 rounded-lg bg-slate-800/30 border border-slate-700/50">
+                    <RiMailLine className="text-blue-400 text-lg flex-shrink-0" />
+                    <span className="flex-1 break-all">{student.email}</span>
+                  </div>
+                )}
+                {student.phone && (
+                  <div className="flex items-center gap-3 text-sm p-3 rounded-lg bg-slate-800/30 border border-slate-700/50">
+                    <RiPhoneLine className="text-purple-400 text-lg flex-shrink-0" />
+                    <span className="flex-1">{student.phone}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Platform Details */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-slate-300">Platform Performance</h3>
+            
+            {statsLoading ? (
+              <div className="text-sm text-slate-400 p-4 bg-slate-800/30 rounded-lg text-center">
+                Loading detailed stats...
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {PLATFORMS.map((platform) => {
+                  const skill = platformSkills[platform] ?? 0;
+                  const handle = stats?.cpHandles?.[platform] || student.cpHandles?.[platform];
+                  
+                  return (
+                    <motion.div
+                      key={platform}
+                      whileHover={{ y: -2 }}
+                      className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4 hover:bg-slate-800/50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-bold capitalize">
+                            {PLATFORM_LABEL[platform]}
+                          </span>
+                        </div>
+                        <span className="text-2xl font-bold text-blue-400">
+                          {Math.round(skill)}
+                        </span>
+                      </div>
+
+                      {handle && (
+                        <p className="text-xs text-slate-400 mb-3">
+                          Handle: <span className="text-slate-300 font-mono">@{handle}</span>
+                        </p>
+                      )}
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-400">Skill Level</span>
+                          <span className="text-slate-300 font-semibold">{Math.round(skill)} / 100</span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-slate-700/50 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min((skill / 100) * 100, 100)}%` }}
+                            transition={{ delay: 0.2, duration: 0.8 }}
+                            className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                          />
+                        </div>
+                      </div>
+
+                      {handle && (
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => window.open(PLATFORM_URL[platform](handle), "_blank")}
+                          className="mt-3 w-full py-2 px-3 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors text-xs font-medium text-slate-200 flex items-center justify-center gap-2"
+                        >
+                          <RiExternalLinkLine /> Open Profile
+                        </motion.button>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Last Updated */}
+          {(student.cpScores?.lastComputedAt || student.lastActiveAt) && (
+            <div className="text-xs text-slate-500 text-center pt-4 border-t border-slate-700/30">
+              <RiTimeLine className="inline mr-1 text-slate-400" />
+              Last updated:{" "}
+              {new Date(student.cpScores?.lastComputedAt || student.lastActiveAt || Date.now()).toLocaleString()}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+export default InstructorDashboard;

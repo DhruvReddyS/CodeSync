@@ -430,16 +430,53 @@ export default function StudentPublicProfilePage() {
   const [metric, setMetric] = useState<DonutMetric>("overall");
   const [portfolioOpen, setPortfolioOpen] = useState(false);
 
-  useEffect(() => {
-    if (!id) return;
+  if (!id) {
+    return <ErrorShell message="Student id is missing" onBack={() => navigate(-1)} />;
+  }
 
+  useEffect(() => {
     (async () => {
       try {
         setLoading(true);
         setErr(null);
 
-        const res = await apiClient.get<ApiPublicProfileResponse>(`/student/profile/${id}`);
-        const payload = res.data;
+        const role = sessionStorage.getItem("role");
+        const endpoints =
+          role === "student"
+            ? [`/student/profile/${id}`, `/instructor/student/${id}/profile`]
+            : [`/instructor/student/${id}/profile`, `/student/profile/${id}`];
+
+        let payload: ApiPublicProfileResponse | null = null;
+        let lastErr: any = null;
+
+        for (const endpoint of endpoints) {
+          try {
+            const res = await apiClient.get<ApiPublicProfileResponse>(endpoint, {
+              timeout: 12000,
+            });
+            payload = res.data;
+            break;
+          } catch (e: any) {
+            lastErr = e;
+            const status = e?.response?.status;
+            const isInstructorEndpoint = endpoint.startsWith("/instructor/");
+            const isStudentEndpoint = endpoint.startsWith("/student/");
+            // If instructor endpoint isn't deployed yet or role mismatch, fall back.
+            if (isInstructorEndpoint && (status === 404 || status === 403)) {
+              continue;
+            }
+            // If student endpoint rejects instructor/admin, fall back.
+            if (isStudentEndpoint && status === 403) {
+              continue;
+            }
+            // For other errors, stop trying.
+            throw e;
+          }
+        }
+
+        if (!payload) {
+          throw lastErr || new Error("Failed to load profile");
+        }
 
         const normalized: ApiProfile = {
           id: payload.student?.id || id,

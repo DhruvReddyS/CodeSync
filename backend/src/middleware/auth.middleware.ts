@@ -7,7 +7,7 @@ import { firestore } from "../config/firebase";
 export interface AuthedRequest extends Request {
   user?: {
     sub: string;
-    role: "student" | "instructor";
+    role: "student" | "instructor" | "admin" | string;
   };
   student?: any;
 }
@@ -26,7 +26,10 @@ export default async function authMiddleware(
   const token = header.split(" ")[1];
 
   try {
-    const payload = verifyToken(token) as { sub: string; role: "student" | "instructor" };
+    const payload = verifyToken(token) as {
+      sub: string;
+      role: "student" | "instructor" | "admin" | string;
+    };
     req.user = payload;
 
     // 🔍 Only students require onboarding checks
