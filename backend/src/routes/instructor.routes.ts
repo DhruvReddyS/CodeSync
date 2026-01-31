@@ -532,7 +532,7 @@ router.get(
           const legacyScores = d.cpScores || {};
 
           const scoresDoc = await studentScoresCol.doc(doc.id).get();
-          const scores = scoresDoc.exists ? scoresDoc.data() : {};
+          const scores = (scoresDoc.exists ? (scoresDoc.data() || {}) : {}) as any;
 
           const score = isNum(scores?.displayScore)
             ? clamp(scores.displayScore)
@@ -632,7 +632,7 @@ router.get(
       const legacyScores = data.cpScores || {};
 
       const scoresDoc = await studentScoresCol.doc(id).get();
-      const scores = scoresDoc.exists ? scoresDoc.data() : {};
+      const scores = (scoresDoc.exists ? (scoresDoc.data() || {}) : {}) as any;
 
       const platformStats = await loadPlatformStatsMap(id);
 
@@ -1140,7 +1140,14 @@ router.get(
         .limit(100)
         .get();
 
-      const items = snap.docs.map((doc: any) => {
+      const items: Array<{
+        id: string;
+        title: string;
+        message: string;
+        audience: string;
+        recipients: any[];
+        createdAt: string | null;
+      }> = snap.docs.map((doc: any) => {
         const d = doc.data() || {};
         return {
           id: doc.id,
@@ -1152,7 +1159,7 @@ router.get(
         };
       });
 
-      const sorted = items.sort((a, b) => {
+      const sorted = items.sort((a: typeof items[number], b: typeof items[number]) => {
         const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return tb - ta;
