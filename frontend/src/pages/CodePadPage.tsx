@@ -15,7 +15,7 @@ const API_BASE =
   (import.meta.env.VITE_API_BASE_URL || "").trim() ||
   (import.meta.env.PROD
     ? "https://codesync-api-2l8n.onrender.com/api"
-    : "http://localhost:5000");
+    : "http://localhost:5000/api");
 
 /* ----------------- TYPES & DATA ----------------- */
 
