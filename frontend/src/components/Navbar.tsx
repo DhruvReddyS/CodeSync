@@ -49,6 +49,11 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [studentMeta, setStudentMeta] = useState<{
+    branch?: string | null;
+    section?: string | null;
+    rollNumber?: string | null;
+  } | null>(null);
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -171,6 +176,26 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     checkOnboarding();
   }, [role, isLoggedIn, authVersion]);
 
+  useEffect(() => {
+    if (role !== "student" || !isLoggedIn) {
+      setStudentMeta(null);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await apiClient.get("/student/profile");
+        const s = res.data?.student || res.data;
+        setStudentMeta({
+          branch: s?.branch ?? null,
+          section: s?.section ?? null,
+          rollNumber: s?.rollNumber ?? null,
+        });
+      } catch {
+        setStudentMeta(null);
+      }
+    })();
+  }, [role, isLoggedIn, authVersion]);
+
   /* --------------------------------------------------
      🔔 LOAD NOTIFICATIONS (role-aware)
   -------------------------------------------------- */
@@ -207,6 +232,13 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = mobileMenuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileMenuOpen]);
 
   const linkGlow =
     "after:absolute after:left-0 after:-bottom-0.5 after:h-0.5 after:w-0 " +
@@ -391,7 +423,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
               )}
 
               {/* NOTIFICATIONS */}
-              <div className="relative" ref={notificationsRef}>
+              <div className="relative order-1" ref={notificationsRef}>
                 <button
                   onClick={() => setNotificationsOpen((prev) => !prev)}
                   className="relative h-9 w-9 flex items-center justify-center rounded-full border border-slate-800 
@@ -461,8 +493,8 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
                 )}
               </div>
 
-              {/* PROFILE */}
-              <div className="relative" ref={profileRef}>
+              {/* PROFILE (hide on mobile) */}
+              <div className="relative hidden lg:block" ref={profileRef}>
                 <button
                   onClick={() => setProfileDropdownOpen((p) => !p)}
                   className="relative h-9 w-9 rounded-full p-[1px] bg-gradient-to-br from-sky-500/80 via-fuchsia-500/60 to-emerald-400/80 
@@ -541,58 +573,162 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
                   </div>
                 )}
               </div>
+
+              {/* MENU (rightmost on mobile) */}
+              {showLoggedInUI && (
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen((v) => !v)}
+                  className="lg:hidden order-2 h-9 w-9 flex items-center justify-center rounded-full border border-slate-800 
+                             bg-slate-950 text-slate-100 hover:border-sky-400 hover:bg-slate-900 transition"
+                  aria-label="Toggle menu"
+                  aria-expanded={mobileMenuOpen}
+                >
+                  {mobileMenuOpen ? <RiCloseLine className="text-lg" /> : <RiMenu3Line className="text-lg" />}
+                </button>
+              )}
             </>
           )}
         </div>
       </nav>
 
-      {/* MOBILE MENU PANEL */}
+      {/* MOBILE MENU DRAWER */}
       {showLoggedInUI && (
         <div
-          className={`lg:hidden border-t border-slate-900 bg-[#050509]/95 backdrop-blur-xl transition-all duration-200 ${
-            mobileMenuOpen ? "max-h-[80vh] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+          className={`fixed inset-0 z-[60] lg:hidden transition-opacity duration-200 ${
+            mobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
+          aria-hidden={!mobileMenuOpen}
         >
-          <div className="px-4 sm:px-6 py-4 space-y-3">
-            {role === "student" && onboardingCompleted === false && (
-              <div className="rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs text-slate-400">
-                Complete onboarding to unlock all features.
-              </div>
-            )}
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50 backdrop-blur-[6px]"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          />
 
-            <div className="grid grid-cols-2 gap-2">
-              {mobileLinks.map((link) => (
-                <NavLink
-                  key={link.to}
-                  to={link.to}
+          <aside
+            className={`absolute right-2 top-2 h-[calc(100%-16px)] w-[50vw] min-w-[320px] max-w-lg rounded-[32px] border border-white/10 
+              bg-white/10 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.45)] ring-1 ring-white/10
+              transition-transform duration-300 ${
+                mobileMenuOpen ? "translate-x-0" : "translate-x-[110%]"
+              }`}
+          >
+            <div className="relative overflow-hidden rounded-t-[32px]">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_60%)]" />
+              <div className="flex items-center justify-between px-4 py-4 relative">
+                <div className="flex items-center gap-2">
+                  <img
+                    src={csLogo}
+                    className="h-8 w-8 drop-shadow-[0_0_12px_rgba(255,255,255,0.4)]"
+                    alt="CodeSync"
+                  />
+                  <span className="text-sm font-semibold tracking-wide text-white">
+                    Code<span className="text-sky-200">Sync</span>
+                  </span>
+                </div>
+                <button
+                  type="button"
                   onClick={() => setMobileMenuOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition ${
-                      isActive
-                        ? "border-sky-500/70 bg-sky-500/10 text-sky-100"
-                        : "border-slate-800 bg-slate-950/80 text-slate-200 hover:border-sky-400"
-                    }`
-                  }
+                  className="h-9 w-9 rounded-full border border-white/20 bg-white/10 text-white"
+                  aria-label="Close menu"
                 >
-                  <span className="text-sm">{link.icon}</span>
-                  <span className="font-medium">{link.label}</span>
-                </NavLink>
-              ))}
+                  <RiCloseLine className="mx-auto text-lg" />
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2">
-              <div className="min-w-0">
-                <p className="text-xs text-slate-200 truncate">{displayName}</p>
-                <p className="text-[0.65rem] text-slate-500 truncate">{displayEmail}</p>
+            <div className="px-4 py-5 space-y-4 overflow-y-auto h-[calc(100%-64px)]">
+              {/* PROFILE CARD */}
+              <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/10 p-4">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,_rgba(56,189,248,0.25),_transparent_55%),radial-gradient(circle_at_90%_20%,_rgba(236,72,153,0.18),_transparent_60%)]" />
+                <div className="relative flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-2xl border border-white/20 bg-white/10 overflow-hidden flex items-center justify-center shadow-[0_0_18px_rgba(56,189,248,0.25)]">
+                    {avatarPhoto ? (
+                      <img src={avatarPhoto} className="h-full w-full object-cover" alt="Avatar" />
+                    ) : (
+                      <span className="text-sm font-semibold text-white">{avatarLetter}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">{displayName}</p>
+                    <p className="text-[0.7rem] text-white/70 truncate">{displayEmail}</p>
+                    <span className="mt-1 inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-[2px] text-[0.6rem] uppercase tracking-[0.22em] text-white/70">
+                      {role === "student" ? "Student" : "Instructor"}
+                    </span>
+                  </div>
+                </div>
+
+                {role === "student" && (
+                  <div className="relative mt-4 grid grid-cols-3 gap-2 text-[0.65rem] text-white/70">
+                    <div className="rounded-2xl border border-white/15 bg-white/10 px-2 py-2 text-center">
+                      <div className="text-[0.58rem] uppercase tracking-[0.22em] text-white/50">
+                        Roll
+                      </div>
+                      <div className="text-white font-medium truncate">
+                        {studentMeta?.rollNumber || "—"}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/10 px-2 py-2 text-center">
+                      <div className="text-[0.58rem] uppercase tracking-[0.22em] text-white/50">
+                        Branch
+                      </div>
+                      <div className="text-white font-medium truncate">
+                        {studentMeta?.branch || "—"}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/10 px-2 py-2 text-center">
+                      <div className="text-[0.58rem] uppercase tracking-[0.22em] text-white/50">
+                        Sec
+                      </div>
+                      <div className="text-white font-medium truncate">
+                        {studentMeta?.section || "—"}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <button
-                onClick={handleLogout}
-                className="text-[0.7rem] text-rose-300 hover:text-rose-200"
-              >
-                Logout
-              </button>
+
+              {role === "student" && onboardingCompleted === false && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs text-slate-400">
+                  Complete onboarding to unlock all features.
+                </div>
+              )}
+
+              {/* NAV GRID */}
+              <div className="grid grid-cols-2 gap-2">
+                {mobileLinks.map((link) => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs transition ${
+                        isActive
+                          ? "border-white/30 bg-white/20 text-white shadow-[0_0_18px_rgba(255,255,255,0.12)]"
+                          : "border-white/15 bg-white/10 text-white/90 hover:border-white/30"
+                      }`
+                    }
+                  >
+                    <span className="text-sm text-white">{link.icon}</span>
+                    <span className="font-medium">{link.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between rounded-2xl border border-white/15 bg-white/10 px-3 py-2">
+                <span className="text-[0.7rem] text-white/70 uppercase tracking-[0.14em]">
+                  Quick actions
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="text-[0.7rem] text-rose-200 hover:text-rose-100"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
-          </div>
+          </aside>
         </div>
       )}
     </header>
