@@ -1,7 +1,13 @@
 import axios, { InternalAxiosRequestConfig, AxiosHeaders } from "axios";
 
+const apiBase =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD
+    ? "https://codesync-api-2l8n.onrender.com/api"
+    : "http://localhost:5000/api");
+
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
+  baseURL: apiBase,
   withCredentials: false, // ✅ IMPORTANT (Bearer token only, no cookies)
 });
 
