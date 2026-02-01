@@ -319,13 +319,21 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
 
   const mobileLinks =
     role === "instructor"
-      ? instructorLinks.map((l) => ({ ...l, icon: l.icon || <RiDashboardLine /> }))
-      : studentLinks.map((l) => ({ ...l, icon: <RiDashboardLine /> }));
+      ? [
+          ...instructorLinks,
+          { to: "/instructor/settings", label: "Settings", icon: <RiSettings3Line /> },
+        ].map((l) => ({ ...l, icon: l.icon || <RiDashboardLine /> }))
+      : [
+          ...studentLinks,
+          { to: "/profile", label: "Profile", icon: <RiUserLine /> },
+          { to: "/settings", label: "Settings", icon: <RiSettings3Line /> },
+        ].map((l) => ({ ...l, icon: l.icon || <RiDashboardLine /> }));
 
 
   return (
-    <header className="sticky top-0 z-50 bg-[#050509]/95 backdrop-blur-xl border-b border-slate-900">
-      <nav className="flex items-center justify-between px-4 sm:px-6 lg:px-10 py-1 transition-all duration-200">
+    <>
+      <header className="sticky top-0 z-[200] bg-[#050509]/95 backdrop-blur-xl border-b border-slate-900">
+        <nav className="flex items-center justify-between px-4 sm:px-6 lg:px-10 py-1 transition-all duration-200">
         {/* BRAND */}
         <Link
           to={brandTarget}
@@ -565,111 +573,105 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
               {showLoggedInUI && (
                 <button
                   type="button"
-                  onClick={() => setMobileMenuOpen((v) => !v)}
+                  onClick={() => setMobileMenuOpen(true)}
                   className="lg:hidden order-2 h-9 w-9 flex items-center justify-center rounded-full border border-slate-800 
                              bg-slate-950 text-slate-100 hover:border-sky-400 hover:bg-slate-900 transition"
-                  aria-label="Toggle menu"
+                  aria-label="Open menu"
                   aria-expanded={mobileMenuOpen}
                 >
-                  {mobileMenuOpen ? <RiCloseLine className="text-lg" /> : <RiMenu3Line className="text-lg" />}
+                  <RiMenu3Line className="text-lg" />
                 </button>
               )}
             </>
           )}
         </div>
-      </nav>
+        </nav>
+      </header>
 
       {/* MOBILE MENU DRAWER */}
       {showLoggedInUI && (
         <div
-          className={`fixed inset-0 z-[9999] lg:hidden transition-opacity duration-200 ${
-            mobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+          className={`fixed inset-0 z-[2147483647] lg:hidden ${
+            mobileMenuOpen ? "pointer-events-auto" : "pointer-events-none"
           }`}
           aria-hidden={!mobileMenuOpen}
         >
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/50 backdrop-blur-[6px]"
+          <div
+            className={`absolute inset-0 transition-opacity duration-200 ${
+              mobileMenuOpen ? "opacity-100" : "opacity-0"
+            } bg-black/60 backdrop-blur-[10px]`}
             onClick={() => setMobileMenuOpen(false)}
-            aria-label="Close menu"
           />
 
           <aside
-            className={`absolute right-0 top-0 h-full w-[90vw] sm:w-[70vw] md:w-[55vw] lg:w-[50vw] max-w-lg 
-              border-l border-white/10 bg-[#070914]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.55)] ring-1 ring-white/10
-              transition-transform duration-300 flex flex-col ${
+            className={`absolute right-0 top-0 h-full w-[88vw] sm:w-[70vw] md:w-[55vw] max-w-lg 
+              bg-[#0a0d16] border-l border-slate-800 shadow-[0_30px_90px_rgba(0,0,0,0.6)]
+              transition-transform duration-300 ${
                 mobileMenuOpen ? "translate-x-0" : "translate-x-full"
               }`}
           >
-            <div className="relative overflow-hidden">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_60%)]" />
-              <div className="flex items-center justify-between px-4 py-4 relative">
-                <div className="flex items-center gap-2">
-                  <img
-                    src={csLogo}
-                    className="h-8 w-8 drop-shadow-[0_0_12px_rgba(255,255,255,0.4)]"
-                    alt="CodeSync"
-                  />
-                  <span className="text-sm font-semibold tracking-wide text-white">
-                    Code<span className="text-sky-200">Sync</span>
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="h-9 w-9 rounded-full border border-white/20 bg-white/10 text-white"
-                  aria-label="Close menu"
-                >
-                  <RiCloseLine className="mx-auto text-lg" />
-                </button>
+            <div className="flex items-center justify-between px-4 py-4 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <img src={csLogo} className="h-8 w-8" alt="CodeSync" />
+                <span className="text-sm font-semibold text-slate-100">
+                  Code<span className="text-sky-300">Sync</span>
+                </span>
               </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="h-9 w-9 rounded-full border border-slate-700 bg-slate-950 text-slate-100"
+                aria-label="Close menu"
+              >
+                <RiCloseLine className="mx-auto text-lg" />
+              </button>
             </div>
 
-            <div className="px-4 py-5 space-y-4 overflow-y-auto flex-1 min-h-0">
-              {/* PROFILE CARD */}
-              <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/10 p-4">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,_rgba(56,189,248,0.25),_transparent_55%),radial-gradient(circle_at_90%_20%,_rgba(236,72,153,0.18),_transparent_60%)]" />
-                <div className="relative flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-2xl border border-white/20 bg-white/10 overflow-hidden flex items-center justify-center shadow-[0_0_18px_rgba(56,189,248,0.25)]">
+            <div className="px-4 py-5 space-y-4 overflow-y-auto h-[calc(100%-64px)]">
+              <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0a0d16] via-[#0d1220] to-[#0a0d16] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.55)]">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex items-center justify-center shadow-[0_0_20px_rgba(56,189,248,0.25)]">
                     {avatarPhoto ? (
                       <img src={avatarPhoto} className="h-full w-full object-cover" alt="Avatar" />
                     ) : (
-                      <span className="text-sm font-semibold text-white">{avatarLetter}</span>
+                      <span className="text-sm font-semibold text-sky-300">{avatarLetter}</span>
                     )}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">{displayName}</p>
-                    <p className="text-[0.7rem] text-white/70 truncate">{displayEmail}</p>
-                    <span className="mt-1 inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-[2px] text-[0.6rem] uppercase tracking-[0.22em] text-white/70">
+                    <p className="text-sm font-semibold text-slate-100 truncate">{displayName}</p>
+                    <p className="text-[0.7rem] text-slate-400 truncate">{displayEmail}</p>
+                    <span className="mt-1 inline-flex items-center rounded-full border border-slate-800 bg-slate-950/80 px-2 py-[2px] text-[0.6rem] uppercase tracking-[0.22em] text-slate-400">
                       {role === "student" ? "Student" : "Instructor"}
                     </span>
                   </div>
                 </div>
 
                 {role === "student" && (
-                  <div className="relative mt-4 grid grid-cols-3 gap-2 text-[0.65rem] text-white/70">
-                    <div className="rounded-2xl border border-white/15 bg-white/10 px-2 py-2 text-center">
-                      <div className="text-[0.58rem] uppercase tracking-[0.22em] text-white/50">
-                        Roll
-                      </div>
-                      <div className="text-white font-medium truncate">
+                  <div className="mt-3 space-y-2 text-[0.7rem] text-slate-300">
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 flex items-center justify-between">
+                      <span className="uppercase tracking-[0.22em] text-[0.58rem] text-slate-500">
+                        Roll Number
+                      </span>
+                      <span className="text-slate-100 font-medium truncate max-w-[60%] text-right">
                         {studentMeta?.rollNumber || "—"}
-                      </div>
+                      </span>
                     </div>
-                    <div className="rounded-2xl border border-white/15 bg-white/10 px-2 py-2 text-center">
-                      <div className="text-[0.58rem] uppercase tracking-[0.22em] text-white/50">
-                        Branch
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-center">
+                        <div className="text-[0.58rem] uppercase tracking-[0.22em] text-slate-500">
+                          Branch
+                        </div>
+                        <div className="text-slate-100 font-medium truncate">
+                          {studentMeta?.branch || "—"}
+                        </div>
                       </div>
-                      <div className="text-white font-medium truncate">
-                        {studentMeta?.branch || "—"}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-white/15 bg-white/10 px-2 py-2 text-center">
-                      <div className="text-[0.58rem] uppercase tracking-[0.22em] text-white/50">
-                        Sec
-                      </div>
-                      <div className="text-white font-medium truncate">
-                        {studentMeta?.section || "—"}
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-center">
+                        <div className="text-[0.58rem] uppercase tracking-[0.22em] text-slate-500">
+                          Section
+                        </div>
+                        <div className="text-slate-100 font-medium truncate">
+                          {studentMeta?.section || "—"}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -682,34 +684,36 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
                 </div>
               )}
 
-              {/* NAV GRID */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-2">
                 {mobileLinks.map((link) => (
                   <NavLink
                     key={link.to}
                     to={link.to}
                     onClick={() => setMobileMenuOpen(false)}
                     className={({ isActive }) =>
-                      `flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs transition ${
+                      `flex items-center justify-between rounded-xl border px-3 py-3 text-sm transition ${
                         isActive
-                          ? "border-white/30 bg-white/20 text-white shadow-[0_0_18px_rgba(255,255,255,0.12)]"
-                          : "border-white/15 bg-white/10 text-white/90 hover:border-white/30"
+                          ? "border-sky-500/70 bg-sky-500/10 text-sky-100 shadow-[0_0_18px_rgba(56,189,248,0.2)]"
+                          : "border-slate-800 bg-slate-950/80 text-slate-200 hover:border-sky-400"
                       }`
                     }
                   >
-                    <span className="text-sm text-white">{link.icon}</span>
-                    <span className="font-medium">{link.label}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-base">{link.icon}</span>
+                      <span className="font-medium">{link.label}</span>
+                    </span>
+                    <span className="text-slate-500">›</span>
                   </NavLink>
                 ))}
               </div>
 
-              <div className="flex items-center justify-between rounded-2xl border border-white/15 bg-white/10 px-3 py-2">
-                <span className="text-[0.7rem] text-white/70 uppercase tracking-[0.14em]">
+              <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2">
+                <span className="text-[0.7rem] text-slate-400 uppercase tracking-[0.14em]">
                   Quick actions
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="text-[0.7rem] text-rose-200 hover:text-rose-100"
+                  className="text-[0.7rem] text-rose-300 hover:text-rose-200"
                 >
                   Logout
                 </button>
@@ -718,7 +722,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
           </aside>
         </div>
       )}
-    </header>
+    </>
   );
 };
 

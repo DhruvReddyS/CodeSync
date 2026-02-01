@@ -330,6 +330,48 @@ const calendarStyles = `
   text-overflow:ellipsis;
   color: rgba(2,6,23,0.96);
 }
+
+@media (max-width: 640px) {
+  .codesync-calendar .rbc-toolbar{
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .codesync-calendar .rbc-toolbar .rbc-btn-group{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .codesync-calendar .rbc-toolbar button{
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  .codesync-calendar .rbc-toolbar .rbc-toolbar-label{
+    font-size: 10px;
+    letter-spacing: 0.14em;
+  }
+  .codesync-calendar .rbc-header{
+    font-size: 9px;
+    letter-spacing: 0.12em;
+  }
+  .codesync-calendar .rbc-date-cell{
+    font-size: 10px;
+  }
+  .codesync-calendar .rbc-month-row,
+  .codesync-calendar .rbc-row-content{
+    min-height: 56px;
+  }
+  .cs-event-chip{
+    padding: 1px 5px;
+  }
+  .cs-event-tag{
+    font-size: 8px;
+    padding: 0 4px;
+  }
+  .cs-event-title{
+    font-size: 9px;
+  }
+}
 .cs-event-tip{
   pointer-events: none;
   position: absolute;
@@ -722,7 +764,7 @@ const ContestsPage: React.FC = () => {
         </div>
 
         <div className="p-3 sm:p-5">
-          <div className="codesync-calendar h-[60vh] sm:h-[72vh] rounded-2xl border border-slate-800 bg-[#020617]/70 p-2 sm:p-3 overflow-hidden">
+          <div className="codesync-calendar w-full h-[68vh] sm:h-[72vh] rounded-2xl border border-slate-800 bg-[#020617]/70 p-2 sm:p-3">
             <Calendar
               localizer={localizer}
               events={displayEvents}

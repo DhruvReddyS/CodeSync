@@ -41,6 +41,7 @@ type PlatformKey =
 type CpScores = {
   codeSyncScore?: number | null;
   displayScore?: number | null;
+  totalProblemsSolved?: number | null;
   platformSkills?: Partial<Record<PlatformKey, number>>;
 };
 
@@ -108,7 +109,7 @@ const LeaderboardPage: React.FC = () => {
   const [branchFilter, setBranchFilter] = useState<string>("ALL");
   const [yearFilter, setYearFilter] = useState<string>("ALL");
   const [sectionFilter, setSectionFilter] = useState<string>("ALL");
-  const [sortMode, setSortMode] = useState<"score" | "rank">("score");
+  const [sortMode, setSortMode] = useState<"score" | "problems">("score");
 
   // ✅ highlight current user (Firestore-based)
   const [currentStudentId, setCurrentStudentId] = useState<string | null>(null);
@@ -250,7 +251,11 @@ const LeaderboardPage: React.FC = () => {
     }
 
     list.sort((a, b) => {
-      if (sortMode === "rank") return a.rank - b.rank;
+      if (sortMode === "problems") {
+        const pa = a.cpScores?.totalProblemsSolved ?? 0;
+        const pb = b.cpScores?.totalProblemsSolved ?? 0;
+        return pb - pa;
+      }
       const sa = a.cpScores?.displayScore ?? 0;
       const sb = b.cpScores?.displayScore ?? 0;
       return sb - sa;
@@ -280,6 +285,18 @@ const LeaderboardPage: React.FC = () => {
 
   const top3 = filtered.slice(0, 3);
   const tableEntries = filtered;
+
+  const getPrimaryMetric = (entry: LeaderboardEntry) =>
+    sortMode === "problems"
+      ? entry.cpScores?.totalProblemsSolved ?? 0
+      : entry.cpScores?.displayScore ?? 0;
+
+  const primaryMetricLabel =
+    sortMode === "problems" ? "Problems solved" : "CodeSync score";
+  const solvedHeaderClass =
+    sortMode === "problems" ? "text-fuchsia-300" : "text-slate-400";
+  const scoreHeaderClass =
+    sortMode === "score" ? "text-emerald-300" : "text-slate-400";
 
   const handleProfileClick = (entry: LeaderboardEntry) => {
     const allowed =
@@ -503,14 +520,14 @@ const LeaderboardPage: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setSortMode("rank")}
+                onClick={() => setSortMode("problems")}
                 className={`px-3 py-1 rounded-full border text-[0.7rem] flex items-center gap-1 transition ${
-                  sortMode === "rank"
-                    ? "border-sky-500 bg-sky-500/20 text-sky-100 shadow-[0_0_18px_rgba(56,189,248,0.4)]"
-                    : "border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-400"
+                  sortMode === "problems"
+                    ? "border-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-100 shadow-[0_0_18px_rgba(217,70,239,0.35)]"
+                    : "border-slate-700 bg-slate-900 text-slate-300 hover:border-fuchsia-400"
                 }`}
               >
-                # Rank
+                â¬‡ Problems solved
               </button>
             </div>
           </div>
@@ -535,10 +552,10 @@ const LeaderboardPage: React.FC = () => {
             )}
           </div>
 
-          <div className="relative mt-3 flex flex-col items-center gap-6 lg:flex-row lg:items-end lg:justify-center">
+          <div className="relative mt-3 grid grid-cols-3 items-end gap-2 sm:gap-4">
             {/* Neon bar under podium */}
             {top3.length > 0 && (
-              <div className="pointer-events-none absolute -bottom-8 left-1/2 h-12 w-[640px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.5),_transparent_70%)] blur-2xl" />
+              <div className="pointer-events-none absolute -bottom-6 left-1/2 h-10 w-[90%] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.5),_transparent_70%)] blur-2xl" />
             )}
 
             {top3.length === 0 && (
@@ -553,6 +570,16 @@ const LeaderboardPage: React.FC = () => {
                 size="md"
                 variant="silver"
                 onClick={handleProfileClick}
+                primaryLabel={primaryMetricLabel}
+                primaryValue={getPrimaryMetric(top3[1])}
+                secondaryLabel={
+                  sortMode === "problems" ? "CodeSync score" : "Problems solved"
+                }
+                secondaryValue={
+                  sortMode === "problems"
+                    ? top3[1].cpScores?.displayScore ?? 0
+                    : top3[1].cpScores?.totalProblemsSolved ?? 0
+                }
               />
             )}
 
@@ -562,6 +589,16 @@ const LeaderboardPage: React.FC = () => {
                 size="lg"
                 variant="gold"
                 onClick={handleProfileClick}
+                primaryLabel={primaryMetricLabel}
+                primaryValue={getPrimaryMetric(top3[0])}
+                secondaryLabel={
+                  sortMode === "problems" ? "CodeSync score" : "Problems solved"
+                }
+                secondaryValue={
+                  sortMode === "problems"
+                    ? top3[0].cpScores?.displayScore ?? 0
+                    : top3[0].cpScores?.totalProblemsSolved ?? 0
+                }
               />
             )}
 
@@ -571,6 +608,16 @@ const LeaderboardPage: React.FC = () => {
                 size="md"
                 variant="bronze"
                 onClick={handleProfileClick}
+                primaryLabel={primaryMetricLabel}
+                primaryValue={getPrimaryMetric(top3[2])}
+                secondaryLabel={
+                  sortMode === "problems" ? "CodeSync score" : "Problems solved"
+                }
+                secondaryValue={
+                  sortMode === "problems"
+                    ? top3[2].cpScores?.displayScore ?? 0
+                    : top3[2].cpScores?.totalProblemsSolved ?? 0
+                }
               />
             )}
           </div>
@@ -580,14 +627,19 @@ const LeaderboardPage: React.FC = () => {
         <section className="mt-2 space-y-3 pb-10">
           <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#050712]/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.9)]">
             {/* DESKTOP HEADER */}
-            <div className="hidden md:grid grid-cols-[70px,2.6fr,1.4fr,1fr,0.9fr,0.9fr,1.1fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr] text-[0.7rem] uppercase tracking-wide text-slate-300 bg-[#020617] border-b border-slate-800 px-4 py-2">
+            <div className="hidden md:grid grid-cols-[70px,2.6fr,1.4fr,1fr,0.9fr,0.9fr,1.1fr,1.1fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr] text-[0.7rem] uppercase tracking-wide text-slate-300 bg-[#020617] border-b border-slate-800 px-4 py-2">
               <span>Rank</span>
               <span>Student</span>
               <span>Roll No</span>
               <span>Branch</span>
               <span>Sec</span>
               <span>Year</span>
-              <span className="text-emerald-300">Total score ↓</span>
+              <span className={solvedHeaderClass}>
+                Solved {sortMode === "problems" ? "↓" : ""}
+              </span>
+              <span className={scoreHeaderClass}>
+                Score {sortMode === "score" ? "↓" : ""}
+              </span>
               <span className="text-amber-300">LC</span>
               <span className="text-orange-300">CC</span>
               <span className="text-emerald-300">HR</span>
@@ -599,7 +651,9 @@ const LeaderboardPage: React.FC = () => {
             <div className="divide-y divide-slate-800/80">
               {tableEntries.map((entry, idx) => {
                 const score = entry.cpScores?.displayScore ?? 0;
-                const isTop10 = entry.rank <= 10;
+                const solved = entry.cpScores?.totalProblemsSolved ?? 0;
+                const computedRank = idx + 1;
+                const isTop10 = computedRank <= 10;
 
                 // ✅ highlight logic: compare entry.studentId with Firestore derived + auth uid fallback
                 const entryId = String(entry.studentId ?? "");
@@ -609,11 +663,11 @@ const LeaderboardPage: React.FC = () => {
                   (meA && entryId === meA) || (meB && entryId === meB);
 
                 const rankChipBase =
-                  entry.rank === 1
+                  computedRank === 1
                     ? "bg-gradient-to-br from-amber-300 via-yellow-300 to-orange-400 text-slate-950 border-amber-400"
-                    : entry.rank === 2
+                    : computedRank === 2
                     ? "bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400 text-slate-900 border-slate-300"
-                    : entry.rank === 3
+                    : computedRank === 3
                     ? "bg-gradient-to-br from-orange-500 via-amber-400 to-yellow-300 text-slate-950 border-amber-500"
                     : "bg-slate-950 text-slate-200 border-slate-700";
 
@@ -648,7 +702,7 @@ const LeaderboardPage: React.FC = () => {
                   >
                     {/* DESKTOP ROW */}
                     <div
-                      className={`hidden md:grid grid-cols-[70px,2.6fr,1.4fr,1fr,0.9fr,0.9fr,1.1fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr] items-center px-4 py-3 text-xs ${rowBg} ${rowHover} ${rowBorderLeft}`}
+                      className={`hidden md:grid grid-cols-[70px,2.6fr,1.4fr,1fr,0.9fr,0.9fr,1.1fr,1.1fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr] items-center px-4 py-3 text-xs ${rowBg} ${rowHover} ${rowBorderLeft}`}
                     >
                       {/* Rank chip */}
                       <div className="flex items-center gap-2">
@@ -659,7 +713,7 @@ const LeaderboardPage: React.FC = () => {
                               : ""
                           }`}
                         >
-                          {entry.rank}
+                          {computedRank}
                         </span>
                       </div>
 
@@ -668,11 +722,11 @@ const LeaderboardPage: React.FC = () => {
                         <div className="relative">
                           <div
                             className={`h-8 w-8 rounded-full border overflow-hidden flex items-center justify-center text-[0.75rem] font-semibold bg-slate-900 ${
-                              entry.rank === 1
+                              computedRank === 1
                                 ? "border-amber-400/90"
-                                : entry.rank === 2
+                                : computedRank === 2
                                 ? "border-slate-300/90"
-                                : entry.rank === 3
+                                : computedRank === 3
                                 ? "border-amber-600/90"
                                 : "border-slate-700"
                             }`}
@@ -735,6 +789,13 @@ const LeaderboardPage: React.FC = () => {
                         {entry.year ?? "—"}
                       </span>
 
+                      {/* Problems solved */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[0.8rem] font-semibold text-fuchsia-200 tabular-nums">
+                          {formatScore(solved)}
+                        </span>
+                      </div>
+
                       {/* Total score */}
                       <div className="flex flex-col gap-1">
                         <span className="text-[0.8rem] font-semibold text-emerald-300 tabular-nums">
@@ -777,7 +838,7 @@ const LeaderboardPage: React.FC = () => {
                               : ""
                           }`}
                         >
-                          {entry.rank}
+                          {computedRank}
                         </span>
 
                         <div className="flex-1 flex items-center gap-2">
@@ -817,6 +878,9 @@ const LeaderboardPage: React.FC = () => {
 
                             <p className="mt-1 text-[0.7rem] text-emerald-300 tabular-nums">
                               Score: {formatScore(score)}
+                            </p>
+                            <p className="text-[0.7rem] text-fuchsia-200 tabular-nums">
+                              Solved: {formatScore(solved)}
                             </p>
                           </div>
                         </div>
@@ -976,6 +1040,10 @@ type PodiumCardProps = {
   size: "md" | "lg";
   variant: PodiumVariant;
   onClick: (entry: LeaderboardEntry) => void;
+  primaryLabel: string;
+  primaryValue: number;
+  secondaryLabel?: string;
+  secondaryValue?: number;
 };
 
 const PodiumCard: React.FC<PodiumCardProps> = ({
@@ -983,13 +1051,15 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
   size,
   variant,
   onClick,
+  primaryLabel,
+  primaryValue,
+  secondaryLabel,
+  secondaryValue,
 }) => {
-  const score = entry.cpScores?.displayScore ?? 0;
 
   const baseHeight =
-    size === "lg" ? "min-h-[320px] sm:min-h-[360px]" : "min-h-[300px] sm:min-h-[330px]";
-  const baseWidth =
-    size === "lg" ? "w-[260px] sm:w-[300px] lg:w-[320px]" : "w-[240px] sm:w-[280px]";
+    size === "lg" ? "min-h-[260px] sm:min-h-[320px]" : "min-h-[240px] sm:min-h-[300px]";
+  const baseWidth = "w-full";
 
   const variantConfig: Record<
     PodiumVariant,
@@ -1052,7 +1122,7 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
       onClick={() => onClick(entry)}
       className={`relative flex flex-col items-center ${baseHeight} ${baseWidth}
         rounded-3xl border bg-[#050712]/80
-        px-4 pt-4 pb-3 backdrop-blur-2xl
+        px-3 sm:px-4 pt-3 sm:pt-4 pb-3 backdrop-blur-2xl
         animate-floaty
         transition-transform duration-300 hover:-translate-y-3 active:scale-[0.98]
         ${cfg.borderGlow}
@@ -1061,7 +1131,7 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/40 opacity-60" />
 
       <div className="relative flex-1 flex flex-col items-center w-full gap-3">
-        <div className="flex w-full items-center justify-between text-[0.7rem]">
+        <div className="flex w-full items-center justify-between text-[0.6rem] sm:text-[0.7rem]">
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-[2px] font-semibold ${cfg.chipBg}`}
           >
@@ -1079,7 +1149,7 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
 
         <div className="mt-1">
           <div
-            className={`h-20 w-20 rounded-full bg-gradient-to-br ${cfg.ringFrom} ${cfg.ringTo} p-[3px]`}
+            className={`h-14 w-14 sm:h-18 sm:w-18 md:h-20 md:w-20 rounded-full bg-gradient-to-br ${cfg.ringFrom} ${cfg.ringTo} p-[3px]`}
           >
             <div className="flex h-full w-full items-center justify-center rounded-full bg-slate-950 overflow-hidden text-xl font-bold text-slate-100">
               {entry.avatarUrl ? (
@@ -1096,10 +1166,10 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
         </div>
 
         <div className="text-center space-y-1">
-          <p className="text-sm font-semibold text-slate-50 line-clamp-2">
+          <p className="text-[0.72rem] sm:text-sm font-semibold text-slate-50 line-clamp-2">
             {entry.name || "Unknown"}
           </p>
-          <p className="text-[0.65rem] text-slate-400">
+          <p className="text-[0.6rem] sm:text-[0.65rem] text-slate-400">
             {entry.branch || "Branch —"}{" "}
             {entry.section ? `· Sec ${entry.section}` : ""}{" "}
             {entry.year ? `· ${entry.year}` : ""}
@@ -1107,15 +1177,23 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
         </div>
 
         <div className="flex flex-col items-center gap-1 mt-1">
-          <p className="text-[0.65rem] text-slate-400 uppercase tracking-[0.22em]">
-            Total CodeSync score
+          <p className="text-[0.55rem] sm:text-[0.65rem] text-slate-400 uppercase tracking-[0.22em]">
+            {primaryLabel}
           </p>
-          <p className="text-2xl font-bold text-emerald-300 tabular-nums">
-            {score.toLocaleString("en-IN")}
+          <p className="text-lg sm:text-xl md:text-2xl font-bold text-emerald-300 tabular-nums">
+            {primaryValue.toLocaleString("en-IN")}
           </p>
+          {secondaryLabel && secondaryValue != null && (
+            <p className="text-[0.6rem] sm:text-[0.7rem] text-slate-400">
+              {secondaryLabel}:{" "}
+              <span className="text-slate-100 tabular-nums">
+                {secondaryValue.toLocaleString("en-IN")}
+              </span>
+            </p>
+          )}
         </div>
 
-        <div className="mt-3 w-full rounded-2xl bg-[#020617]/90 border border-slate-800 px-3 py-2">
+        <div className="mt-3 w-full rounded-2xl bg-[#020617]/90 border border-slate-800 px-3 py-2 hidden sm:block">
           <p className="text-[0.65rem] text-slate-400 mb-1">
             Platform breakdown
           </p>

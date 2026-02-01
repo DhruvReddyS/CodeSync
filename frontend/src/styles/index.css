@@ -49,3 +49,10 @@ svg {
 .font-mono-cs {
   font-family: var(--font-mono);
 }
+
+/* Hide Monaco accessibility help button/widget in CodePad */
+.codesync-codepad .monaco-editor .accessibilityHelpWidget,
+.codesync-codepad .monaco-editor .accessibility-help-widget,
+.codesync-codepad .monaco-editor .accessibility-help {
+  display: none !important;
+}

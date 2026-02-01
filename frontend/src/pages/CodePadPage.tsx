@@ -440,7 +440,7 @@ const CodePadPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#050509] text-slate-100 font-display overflow-x-hidden">
+    <div className="codesync-codepad min-h-screen w-full bg-[#050509] text-slate-100 font-display overflow-x-hidden">
       <div className="pointer-events-none fixed inset-0 opacity-40">
         <div className="absolute -top-24 -left-10 h-64 w-64 rounded-full bg-sky-500 blur-3xl" />
         <div className="absolute bottom-[-4rem] right-[-2rem] h-72 w-72 rounded-full bg-fuchsia-500 blur-3xl" />
@@ -655,6 +655,7 @@ const CodePadPage: React.FC = () => {
                   fontLigatures: true,
                   smoothScrolling: true,
                   scrollBeyondLastLine: false,
+                  accessibilitySupport: "off",
                   padding: { top: 10 },
                 }}
               />
