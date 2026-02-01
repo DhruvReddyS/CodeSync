@@ -481,7 +481,7 @@ const ProfilePage: React.FC = () => {
   return (
     <div className={`min-h-screen w-full ${PageBG} font-display overflow-x-hidden`}>
       {/* HEADER */}
-      <section className="w-full px-6 sm:px-10 lg:px-16 xl:px-24 2xl:px-40 pt-10 pb-6">
+      <section className="w-full px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24 pt-10 pb-6">
         <div className={`${Card} p-6 sm:p-8`}>
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="space-y-3 min-w-0">
@@ -536,12 +536,12 @@ const ProfilePage: React.FC = () => {
               ) : null}
             </div>
 
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex w-full flex-col items-start gap-2 sm:items-end sm:w-auto">
               <Link to="/dashboard" className="text-xs text-slate-400 hover:text-slate-200 transition">
                 ← Back to dashboard
               </Link>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={resetToInitial}
                   disabled={!dirty || saving}
@@ -596,7 +596,7 @@ const ProfilePage: React.FC = () => {
       </AnimatePresence>
 
       {/* BODY */}
-      <section className="w-full px-6 sm:px-10 lg:px-16 xl:px-24 2xl:px-40 pb-20">
+      <section className="w-full px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24 pb-20">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           {/* LEFT */}
           <div className="space-y-6">
@@ -684,7 +684,7 @@ const ProfilePage: React.FC = () => {
                 onEdit={() => toggleSection("academic")}
               />
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-3">
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {[
                   { k: "branch", label: "Branch", ph: "CSE / CSIT / ECE…", ic: <RiGraduationCapLine /> },
                   { k: "section", label: "Section", ph: "A / B / C…", ic: <RiHashtag /> },

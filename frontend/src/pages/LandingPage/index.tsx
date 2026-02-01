@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  AnimatePresence,
   motion,
   useReducedMotion,
   useScroll,
@@ -41,6 +42,7 @@ import {
 } from "./ui";
 
 import { FEATURE_BLOCKS, PLATFORMS, ROLES, SECURITY_POINTS, STATS } from "./data";
+import csLogo from "../../assets/logo/logo.png";
 
 /**
  * LandingPage — Futuristic Top 1% UI (module chambers, no boring preview cards)
@@ -57,6 +59,7 @@ const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const reduce = useReducedMotion() ?? false;
   const [lowPower, setLowPower] = useState(false);
+  const [booting, setBooting] = useState(true);
   const glow = useCursorGlow(lowPower);
 
   useEffect(() => {
@@ -77,6 +80,12 @@ const LandingPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const delay = reduce ? 0 : 800;
+    const timer = window.setTimeout(() => setBooting(false), delay);
+    return () => window.clearTimeout(timer);
+  }, [reduce]);
+
   // ✅ fix MotionValue usage in template string
   const cursorPlasma = useMotionTemplate`
     radial-gradient(760px circle at ${glow.x}px ${glow.y}px,
@@ -89,6 +98,30 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-[#050509] text-slate-100 overflow-x-hidden">
+      <AnimatePresence>
+        {booting && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050509]"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          >
+            <div className="relative flex flex-col items-center gap-4">
+              <div className="relative">
+                <div className="h-20 w-20 rounded-3xl bg-slate-950/90 border border-slate-800 flex items-center justify-center shadow-[0_0_40px_rgba(56,189,248,0.5)]">
+                  <img src={csLogo} alt="CodeSync" className="h-10 w-10" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-24 w-24 rounded-full border border-slate-800 border-t-sky-400/80 border-r-fuchsia-400/70 animate-spin [animation-duration:1.2s]" />
+                </div>
+              </div>
+              <p className="text-[0.7rem] uppercase tracking-[0.3em] text-slate-500">
+                Loading CodeSync
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <HyperBackdrop lowMotion={lowPower} />
 
       {/* Cursor plasma (brand hues) */}

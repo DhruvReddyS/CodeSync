@@ -96,8 +96,12 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="w-full px-4 py-8 md:px-8">
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-5xl">
+    <div className="w-full px-4 py-8 sm:px-6 lg:px-10">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mx-auto max-w-4xl"
+      >
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-800/60 bg-slate-900/40 px-3 py-1 text-xs text-slate-200">
             <RiShieldCheckLine className="text-slate-300" />
@@ -109,8 +113,8 @@ export default function SettingsPage() {
           Control who can view your public profile from the leaderboard.
         </p>
 
-        <div className="mt-6 rounded-3xl border border-slate-800/60 bg-gradient-to-b from-slate-900/50 to-slate-950/30 p-6">
-          <div className="flex items-start justify-between gap-4">
+        <div className="mt-6 rounded-3xl border border-slate-800/60 bg-gradient-to-b from-slate-900/50 to-slate-950/30 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-base font-semibold text-slate-100">Private profile</p>
               <p className="mt-1 text-sm text-slate-400">
@@ -122,7 +126,7 @@ export default function SettingsPage() {
               type="button"
               disabled={loading || saving}
               onClick={() => handleToggle(!isPrivate)}
-              className={`relative h-9 w-16 rounded-full border transition ${
+              className={`relative h-9 w-16 rounded-full border transition self-start sm:self-auto ${
                 isPrivate
                   ? "border-emerald-500/60 bg-emerald-500/20"
                   : "border-slate-700 bg-slate-900/60"
