@@ -51,7 +51,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <Navbar authVersion={authVersion} />
 
-      <main className="w-full">
+      <main className="w-full overflow-x-hidden">
         <Routes>
           {/* ---------- PUBLIC ROUTES ---------- */}
           <Route
