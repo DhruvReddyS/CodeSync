@@ -379,19 +379,6 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
 
         {/* RIGHT SIDE */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* MOBILE MENU TOGGLE */}
-          {showLoggedInUI && (
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              className="lg:hidden h-9 w-9 flex items-center justify-center rounded-full border border-slate-800 
-                         bg-slate-950 text-slate-100 hover:border-sky-400 hover:bg-slate-900 transition"
-              aria-label="Toggle menu"
-              aria-expanded={mobileMenuOpen}
-            >
-              {mobileMenuOpen ? <RiCloseLine className="text-lg" /> : <RiMenu3Line className="text-lg" />}
-            </button>
-          )}
           {/* LOGGED OUT VIEW */}
           {!showLoggedInUI ? (
             <>
@@ -595,7 +582,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
       {/* MOBILE MENU DRAWER */}
       {showLoggedInUI && (
         <div
-          className={`fixed inset-0 z-[60] lg:hidden transition-opacity duration-200 ${
+          className={`fixed inset-0 z-[9999] lg:hidden transition-opacity duration-200 ${
             mobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
           aria-hidden={!mobileMenuOpen}
@@ -608,13 +595,13 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
           />
 
           <aside
-            className={`absolute right-2 top-2 h-[calc(100%-16px)] w-[50vw] min-w-[320px] max-w-lg rounded-[32px] border border-white/10 
-              bg-white/10 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.45)] ring-1 ring-white/10
-              transition-transform duration-300 ${
-                mobileMenuOpen ? "translate-x-0" : "translate-x-[110%]"
+            className={`absolute right-0 top-0 h-full w-[90vw] sm:w-[70vw] md:w-[55vw] lg:w-[50vw] max-w-lg 
+              border-l border-white/10 bg-[#070914]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.55)] ring-1 ring-white/10
+              transition-transform duration-300 flex flex-col ${
+                mobileMenuOpen ? "translate-x-0" : "translate-x-full"
               }`}
           >
-            <div className="relative overflow-hidden rounded-t-[32px]">
+            <div className="relative overflow-hidden">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_60%)]" />
               <div className="flex items-center justify-between px-4 py-4 relative">
                 <div className="flex items-center gap-2">
@@ -638,7 +625,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
               </div>
             </div>
 
-            <div className="px-4 py-5 space-y-4 overflow-y-auto h-[calc(100%-64px)]">
+            <div className="px-4 py-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               {/* PROFILE CARD */}
               <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/10 p-4">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,_rgba(56,189,248,0.25),_transparent_55%),radial-gradient(circle_at_90%_20%,_rgba(236,72,153,0.18),_transparent_60%)]" />
