@@ -33,7 +33,9 @@ const allowedOrigins = new Set<string>([
   "http://127.0.0.1:5173",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://codesync-mvsr.onrender.com", // ✅ Production frontend
+  "https://codesync-mvsr.onrender.com", // ✅ Legacy production frontend
+  "https://code-sync-2vikg11rk-dhruvreddys-projects.vercel.app",
+  "https://codesync.byus4u.in",
 ]);
 
 if (FRONTEND_URL) allowedOrigins.add(FRONTEND_URL);
