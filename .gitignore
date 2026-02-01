@@ -8,6 +8,8 @@ frontend/node_modules/
 # Vite / build cache
 .vite/
 **/.vite/
+dist/
+frontend/dist/
 
 # =====================
 # Environment variables
