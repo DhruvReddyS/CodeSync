@@ -297,7 +297,7 @@ const CSAiPage: React.FC = () => {
       </div>
 
       {/* CHAT CONTAINER */}
-      <div className="relative rounded-3xl border border-slate-800 bg-black/70 backdrop-blur-xl shadow-[0_0_40px_rgba(15,23,42,0.9)] w-full max-w-5xl mx-auto h-[80vh] flex flex-col overflow-hidden">
+      <div className="relative rounded-3xl border border-slate-800 bg-black/70 backdrop-blur-xl shadow-[0_0_40px_rgba(15,23,42,0.9)] w-full max-w-5xl mx-auto h-[70vh] sm:h-[80vh] flex flex-col overflow-hidden">
         {/* top strip */}
         <div className="flex items-center justify-between border-b border-slate-800/80 px-4 py-3 bg-gradient-to-r from-black via-[#050815] to-black">
           <div className="flex items-center gap-3">

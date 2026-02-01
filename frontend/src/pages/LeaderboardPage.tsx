@@ -986,8 +986,10 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
 }) => {
   const score = entry.cpScores?.displayScore ?? 0;
 
-  const baseHeight = size === "lg" ? "min-h-[360px]" : "min-h-[330px]";
-  const baseWidth = size === "lg" ? "w-[320px]" : "w-[280px]";
+  const baseHeight =
+    size === "lg" ? "min-h-[320px] sm:min-h-[360px]" : "min-h-[300px] sm:min-h-[330px]";
+  const baseWidth =
+    size === "lg" ? "w-[260px] sm:w-[300px] lg:w-[320px]" : "w-[240px] sm:w-[280px]";
 
   const variantConfig: Record<
     PodiumVariant,

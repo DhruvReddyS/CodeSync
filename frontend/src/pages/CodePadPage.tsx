@@ -520,7 +520,7 @@ const CodePadPage: React.FC = () => {
         </header>
 
         {/* ✅ TALLER MAIN AREA + EDITOR GETS MORE SPACE */}
-        <main className="grid h-[780px] grid-cols-1 gap-6 xl:grid-cols-4">
+        <main className="grid grid-cols-1 gap-6 min-h-[640px] sm:min-h-[720px] xl:h-[780px] xl:grid-cols-4">
           <section className="relative col-span-1 flex flex-col rounded-3xl border border-slate-800 bg-black/90 shadow-[0_0_35px_rgba(15,23,42,0.9)] backdrop-blur-xl xl:col-span-3">
             <div className="h-[2px] w-full bg-gradient-to-r from-sky-500 via-fuchsia-500 to-emerald-400 opacity-70" />
 

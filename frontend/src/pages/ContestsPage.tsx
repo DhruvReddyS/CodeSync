@@ -722,7 +722,7 @@ const ContestsPage: React.FC = () => {
         </div>
 
         <div className="p-3 sm:p-5">
-          <div className="codesync-calendar h-[72vh] rounded-2xl border border-slate-800 bg-[#020617]/70 p-2 sm:p-3 overflow-hidden">
+          <div className="codesync-calendar h-[60vh] sm:h-[72vh] rounded-2xl border border-slate-800 bg-[#020617]/70 p-2 sm:p-3 overflow-hidden">
             <Calendar
               localizer={localizer}
               events={displayEvents}
