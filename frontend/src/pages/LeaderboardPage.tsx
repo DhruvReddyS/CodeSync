@@ -159,7 +159,13 @@ const LeaderboardPage: React.FC = () => {
 
         // fallback: still highlight by uid (in case backend uses uid as studentId)
         setCurrentStudentId(uid);
-      } catch (e) {
+      } catch (e: any) {
+        const code = e?.code || e?.message || "";
+        if (String(code).includes("permission-denied")) {
+          // Firestore rules may block reads for some users; fall back quietly.
+          setCurrentStudentId(uid);
+          return;
+        }
         console.error("[Leaderboard] current user lookup failed:", e);
         setCurrentStudentId(uid);
       }

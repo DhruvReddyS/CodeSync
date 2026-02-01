@@ -11,6 +11,8 @@ import {
   RiDashboardLine,
   RiTeamLine,
   RiBarChart2Line,
+  RiMenu3Line,
+  RiCloseLine,
 } from "react-icons/ri";
 import { auth } from "../lib/firebaseClient";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -46,6 +48,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
 
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -197,6 +200,14 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 1024) setMobileMenuOpen(false);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const linkGlow =
     "after:absolute after:left-0 after:-bottom-0.5 after:h-0.5 after:w-0 " +
     "after:bg-gradient-to-r after:from-sky-400 after:via-fuchsia-400 after:to-rose-400 " +
@@ -227,6 +238,7 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
       setRole(null);
       setIsLoggedIn(false);
       setProfileDropdownOpen(false);
+      setMobileMenuOpen(false);
 
       navigate("/", { replace: true });
       window.location.reload();
@@ -272,6 +284,11 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
     setNotificationsOpen(false);
     if (route) navigate(route);
   };
+
+  const mobileLinks =
+    role === "instructor"
+      ? instructorLinks.map((l) => ({ ...l, icon: l.icon || <RiDashboardLine /> }))
+      : studentLinks.map((l) => ({ ...l, icon: <RiDashboardLine /> }));
 
 
   return (
@@ -330,6 +347,19 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
 
         {/* RIGHT SIDE */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* MOBILE MENU TOGGLE */}
+          {showLoggedInUI && (
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="lg:hidden h-9 w-9 flex items-center justify-center rounded-full border border-slate-800 
+                         bg-slate-950 text-slate-100 hover:border-sky-400 hover:bg-slate-900 transition"
+              aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <RiCloseLine className="text-lg" /> : <RiMenu3Line className="text-lg" />}
+            </button>
+          )}
           {/* LOGGED OUT VIEW */}
           {!showLoggedInUI ? (
             <>
@@ -515,6 +545,56 @@ const Navbar: React.FC<NavbarProps> = ({ authVersion }) => {
           )}
         </div>
       </nav>
+
+      {/* MOBILE MENU PANEL */}
+      {showLoggedInUI && (
+        <div
+          className={`lg:hidden border-t border-slate-900 bg-[#050509]/95 backdrop-blur-xl transition-all duration-200 ${
+            mobileMenuOpen ? "max-h-[80vh] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+          }`}
+        >
+          <div className="px-4 sm:px-6 py-4 space-y-3">
+            {role === "student" && onboardingCompleted === false && (
+              <div className="rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs text-slate-400">
+                Complete onboarding to unlock all features.
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              {mobileLinks.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition ${
+                      isActive
+                        ? "border-sky-500/70 bg-sky-500/10 text-sky-100"
+                        : "border-slate-800 bg-slate-950/80 text-slate-200 hover:border-sky-400"
+                    }`
+                  }
+                >
+                  <span className="text-sm">{link.icon}</span>
+                  <span className="font-medium">{link.label}</span>
+                </NavLink>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-xs text-slate-200 truncate">{displayName}</p>
+                <p className="text-[0.65rem] text-slate-500 truncate">{displayEmail}</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="text-[0.7rem] text-rose-300 hover:text-rose-200"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

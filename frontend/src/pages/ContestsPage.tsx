@@ -30,11 +30,17 @@ import {
 } from "react-icons/ri";
 
 /* ----------------- ✅ API BASE (NO LOCALHOST HARDCODE) ----------------- */
-const API_BASE =
+const normalizeApiBase = (value: string) => {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
+};
+
+const API_BASE = normalizeApiBase(
   (import.meta.env.VITE_API_BASE_URL || "").trim() ||
-  (import.meta.env.PROD
-    ? "https://codesync-api-2l8n.onrender.com/api"
-    : "http://localhost:5000/api");
+    (import.meta.env.PROD
+      ? "https://codesync-api-2l8n.onrender.com/api"
+      : "http://localhost:5000/api")
+);
 
 /* ----------------- DATE LOCALIZER ----------------- */
 
